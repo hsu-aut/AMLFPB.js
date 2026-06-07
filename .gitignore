@@ -1,0 +1,44 @@
+# .NET / Visual Studio build outputs
+[Bb]in/
+[Oo]bj/
+build/
+*.user
+*.suo
+.vs/
+
+# NuGet artifacts (we build locally; nupkg is regenerated)
+*.nupkg
+packages/
+
+# Generated FPB.JS assets bundled into the plugin at build time.
+# Tracking these would pollute diffs every time FPB.JS is rebuilt.
+Aml.Editor.Plugin.FPB/fpbjs-assets/fpbjs.esm.js
+Aml.Editor.Plugin.FPB/fpbjs-assets/css/
+
+# IDE / editor crud
+*.swp
+*.tmp
+.vscode/
+.idea/
+
+# Tool-managed
+*.log
+node_modules/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Legacy/exploration artifacts (not part of the source we track)
+Aml.Editor.Plugin.FPB.zip
+
+# Rider / VS user files
+*.suo
+*.user
+.idea/
+.vs/
+
+# Coverage / test outputs
+TestResults/
+coverage/
+*.coverage

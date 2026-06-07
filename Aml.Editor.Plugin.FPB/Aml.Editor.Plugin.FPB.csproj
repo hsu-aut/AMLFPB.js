@@ -1,0 +1,131 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows7.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Version>0.5.0</Version>
+    <Description>AMLFPB.js — VDI 3682 Formalised Process Description (FPD) modeller for the AutomationML Editor. Embeds the FPB.js diagram canvas inside the editor with one viewer-tab per FPD InstanceHierarchy, live two-way sync between the AML tree and the diagram, VDI 3682 Blatt 2 structural validation, "+ New Process" + Import / Export for IH-level workflows.</Description>
+    <PackageTags>AMLEditor; AMLEditorPlugin.Net; AutomationML; FPB; VDI3682</PackageTags>
+    <Authors>VDI 3682 Project</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+
+    <BaseOutputPath>$(SolutionDir)build\Plugins\$(MSBuildProjectName)</BaseOutputPath>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+
+    <!-- Where FPB.JS dist/ lives (relative to this csproj) -->
+    <FpbJsDistDir>..\..\..\FPB.JS\dist</FpbJsDistDir>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aml.Editor.Plugin.Contract" Version="4.*">
+      <PrivateAssets>All</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Aml.Engine" Version="4.*">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Aml.Editor.API" Version="2.*">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Aml.Skins" Version="2.*">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <!-- WebView2: PrivateAssets=all suppresses NuGet dep in nuspec.
+         GeneratePathProperty=true exposes $(PkgMicrosoft_Web_WebView2) so we can
+         pack the actual DLLs ourselves from the NuGet cache below. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.*" GeneratePathProperty="true">
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\fpb-aml-mapper\dotnet\FpbMapper.Conversion\FpbMapper.Conversion.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+  </ItemGroup>
+
+  <!-- ─── Bundle DLLs into nupkg (from $(OutputPath), all guaranteed by the build) ── -->
+  <ItemGroup>
+    <None Include="$(OutputPath)$(AssemblyName).deps.json" Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="$(OutputPath)FpbMapper.Conversion.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="Metadata.xml" CopyToOutputDirectory="PreserveNewest" />
+
+    <!-- WebView2 DLLs from the NuGet cache (Link ensures CopyToOutputDirectory works) -->
+    <None Include="$(PkgMicrosoft_Web_WebView2)\lib\net462\Microsoft.Web.WebView2.Core.dll"
+          Link="Microsoft.Web.WebView2.Core.dll"
+          CopyToOutputDirectory="PreserveNewest" Visible="false"
+          Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="$(PkgMicrosoft_Web_WebView2)\lib\net462\Microsoft.Web.WebView2.Wpf.dll"
+          Link="Microsoft.Web.WebView2.Wpf.dll"
+          CopyToOutputDirectory="PreserveNewest" Visible="false"
+          Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="$(PkgMicrosoft_Web_WebView2)\lib\Microsoft.Web.WebView2.Core.winmd"
+          Link="Microsoft.Web.WebView2.Core.winmd"
+          CopyToOutputDirectory="PreserveNewest" Visible="false"
+          Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <!-- WebView2Loader.dll: NuGet.Pack ignores items pointing at runtimes/win-x64/native/.
+         Stage a copy under obj/bundled/ so it looks like a plain content asset. -->
+    <None Include="$(IntermediateOutputPath)bundled\WebView2Loader.dll"
+          Link="WebView2Loader.dll"
+          CopyToOutputDirectory="PreserveNewest" Visible="false"
+          Pack="true" PackagePath="lib\$(TargetFramework)\WebView2Loader.dll" />
+  </ItemGroup>
+
+  <!-- ─── Ship FPB.JS lib build + index.html as content assets ─────────────────── -->
+  <ItemGroup>
+    <!-- Pre-flight check: surface a friendly error if FPB.JS hasn't been built yet. -->
+    <None Include="$(FpbJsDistDir)\fpbjs.esm.js"
+          Link="fpbjs-assets\fpbjs.esm.js"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="lib\$(TargetFramework)\fpbjs-assets\fpbjs.esm.js" />
+
+    <None Include="$(FpbJsDistDir)\css\**\*"
+          Link="fpbjs-assets\css\%(RecursiveDir)%(Filename)%(Extension)"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="lib\$(TargetFramework)\fpbjs-assets\css\%(RecursiveDir)%(Filename)%(Extension)" />
+
+    <None Include="fpbjs-assets\index.html"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="lib\$(TargetFramework)\fpbjs-assets\index.html" />
+
+    <None Include="fpbjs-assets\vendor\**\*"
+          CopyToOutputDirectory="PreserveNewest"
+          Pack="true"
+          PackagePath="lib\$(TargetFramework)\fpbjs-assets\vendor\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <Target Name="VerifyFpbJsDist" BeforeTargets="BeforeBuild">
+    <Error Condition="!Exists('$(FpbJsDistDir)\fpbjs.esm.js')"
+           Text="FPB.JS dist/ not built. Run 'npm install &amp;&amp; npm run build' in $(FpbJsDistDir)\.." />
+  </Target>
+
+  <!-- esm.sh ships react-dom.js with an absolute /react@x/... import that 404s under
+       the WebView2 virtual host. Rewrite it to the bare specifier 'react' so the
+       importmap in index.html catches it. Idempotent. -->
+  <Target Name="PatchVendorReactDom" BeforeTargets="BeforeBuild">
+    <PropertyGroup>
+      <_VendorReactDomFile>fpbjs-assets\vendor\react-dom.js</_VendorReactDomFile>
+    </PropertyGroup>
+    <ReadLinesFromFile Condition="Exists('$(_VendorReactDomFile)')" File="$(_VendorReactDomFile)">
+      <Output TaskParameter="Lines" ItemName="_VendorReactDomLines" />
+    </ReadLinesFromFile>
+    <WriteLinesToFile Condition="Exists('$(_VendorReactDomFile)')"
+                      File="$(_VendorReactDomFile)"
+                      Lines="@(_VendorReactDomLines->Replace('&quot;/react@17.0.2/es2022/react.mjs&quot;', '&quot;react&quot;')->Replace('&quot;/react@18.3.1/es2022/react.mjs&quot;', '&quot;react&quot;'))"
+                      Overwrite="true" />
+  </Target>
+
+  <!-- Stage WebView2Loader.dll so NuGet.Pack treats it as a regular content asset.
+       Must run before the build so the file exists when MSBuild resolves the None item above. -->
+  <Target Name="StageWebView2Loader" BeforeTargets="BeforeResolveReferences">
+    <Copy SourceFiles="$(PkgMicrosoft_Web_WebView2)\runtimes\win-x64\native\WebView2Loader.dll"
+          DestinationFolder="$(IntermediateOutputPath)bundled\"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

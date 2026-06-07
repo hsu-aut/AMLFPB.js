@@ -1,0 +1,77 @@
+<UserControl
+    x:Class="Aml.Editor.Plugin.FPB.Views.IhView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+    mc:Ignorable="d"
+    d:DesignHeight="500" d:DesignWidth="800">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Local toolbar: compact icon buttons matching the editor's native side
+             panels (Segoe MDL2 Assets glyphs in coloured boxes, mouse-over reveals
+             the action label via tooltip). -->
+        <ToolBar Grid.Row="0">
+            <ToolBar.Resources>
+                <Style x:Key="IconText" TargetType="TextBlock">
+                    <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
+                    <Setter Property="FontSize" Value="14"/>
+                    <Setter Property="VerticalAlignment" Value="Center"/>
+                    <Setter Property="Margin" Value="0,0,4,0"/>
+                </Style>
+            </ToolBar.Resources>
+
+            <Button x:Name="UpdateButton"
+                    Click="UpdateButton_Click"
+                    ToolTip="Update InstanceHierarchy — push pending FPB.js viewer edits into this IH. Editor save (Ctrl+S) afterwards persists to disk.">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE895;" Foreground="#E08020"/>
+                    <TextBlock Text="Update" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Button x:Name="RefreshButton"
+                    Click="RefreshButton_Click"
+                    ToolTip="Refresh from AML — re-render this viewer from the current AML document state.">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE72C;" Foreground="#2070C0"/>
+                    <TextBlock Text="Refresh" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Separator/>
+            <Button x:Name="ExportButton"
+                    Click="ExportButton_Click"
+                    ToolTip="Export JSON — save this InstanceHierarchy's FPD content as an FPB.js JSON file.">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE78C;" Foreground="#608060"/>
+                    <TextBlock Text="Export" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
+            <Separator/>
+            <TextBlock x:Name="StatusLabel"
+                       Text=""
+                       VerticalAlignment="Center"
+                       Foreground="#666"
+                       FontStyle="Italic"
+                       Margin="6,0"/>
+        </ToolBar>
+
+        <Grid Grid.Row="1">
+            <wv2:WebView2 x:Name="WebView"/>
+            <Border x:Name="WebViewPlaceholder"
+                    Background="#F8F8F8"
+                    Visibility="Visible">
+                <TextBlock Text="Loading FPB.js viewer…"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Foreground="#666"
+                           FontSize="13"/>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

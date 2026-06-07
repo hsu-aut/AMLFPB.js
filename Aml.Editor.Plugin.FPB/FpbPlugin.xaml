@@ -1,0 +1,108 @@
+<aml:PluginViewBase
+    x:Class="Aml.Editor.Plugin.FPB.FpbPlugin"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:aml="clr-namespace:Aml.Editor.Plugin.WPFBase;assembly=Aml.Editor.Plugin.Contract"
+    mc:Ignorable="d"
+    d:DesignHeight="600" d:DesignWidth="900">
+
+    <!-- Make ALL TabItems in this plugin a bit smaller — the editor's skin uses
+         a fairly large default that doesn't sit well in a nested-tab layout. -->
+    <aml:PluginViewBase.Resources>
+        <Style TargetType="TabItem">
+            <Setter Property="FontSize" Value="12"/>
+        </Style>
+    </aml:PluginViewBase.Resources>
+
+    <TabControl>
+        <!-- Tab 1: per-IH sub-tabs -->
+        <TabItem Header="FPB.js Viewer">
+            <Grid>
+                <!-- Let the editor's Aml.Skins theme own the appearance — no custom
+                     TabControl style here. Tab headers are plain strings so the
+                     skin's TabItem template applies cleanly. -->
+                <TabControl x:Name="IhTabs"/>
+                <Border x:Name="NoIhPlaceholder"
+                        Background="#F8F8F8"
+                        Visibility="Visible">
+                    <TextBlock HorizontalAlignment="Center"
+                               VerticalAlignment="Center"
+                               Foreground="#666"
+                               FontSize="13"
+                               TextAlignment="Center"
+                               TextWrapping="Wrap"
+                               MaxWidth="500">
+                        Open an AML document with at least one InstanceHierarchy that contains an FPD_Process. Each FPD-bearing InstanceHierarchy will appear as its own tab here.
+                    </TextBlock>
+                </Border>
+            </Grid>
+        </TabItem>
+
+        <!-- Tab 2: status log + diagnostics controls -->
+        <TabItem Header="Status / Diagnostics">
+            <Grid Margin="8">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0"
+                           Text="FPB.js Import/Export (VDI 3682)"
+                           FontWeight="SemiBold"
+                           FontSize="13"
+                           Margin="0,0,0,6"/>
+
+                <StackPanel Grid.Row="1" Orientation="Vertical" Margin="0,0,0,6">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                        <CheckBox x:Name="DebugToggle"
+                                  Content="Verbose debug logging"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,12,0"
+                                  Checked="DebugToggle_Changed"
+                                  Unchecked="DebugToggle_Changed"/>
+                        <CheckBox x:Name="AutoSaveToggle"
+                                  Content="Auto-save editor after Update InstanceHierarchy"
+                                  VerticalAlignment="Center"
+                                  Margin="0,0,12,0"
+                                  Checked="AutoSaveToggle_Changed"
+                                  Unchecked="AutoSaveToggle_Changed"/>
+                        <CheckBox x:Name="ConfirmLargeUpdatesToggle"
+                                  Content="Confirm large updates"
+                                  VerticalAlignment="Center"
+                                  ToolTip="When the snapshot would add/remove more elements or connections than the threshold, ask for confirmation before applying."
+                                  Margin="0,0,12,0"
+                                  Checked="ConfirmLargeUpdatesToggle_Changed"
+                                  Unchecked="ConfirmLargeUpdatesToggle_Changed"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="OpenLogFolderButton"
+                                Content="Open log folder"
+                                Padding="8,2"
+                                Click="OpenLogFolderButton_Click"/>
+                        <TextBlock x:Name="LogFilePathLabel"
+                                   Text=""
+                                   Margin="12,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="#888"
+                                   FontSize="11"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBox Grid.Row="2"
+                         x:Name="StatusLog"
+                         IsReadOnly="True"
+                         VerticalScrollBarVisibility="Auto"
+                         TextWrapping="Wrap"
+                         FontFamily="Consolas"
+                         FontSize="11"
+                         BorderThickness="1"
+                         BorderBrush="#CCC"
+                         Padding="4"
+                         Text="Ready. Each FPD InstanceHierarchy in the open AML document gets its own tab in the FPB.js Viewer tab; per-IH Update/Refresh/Export buttons live inside that tab."/>
+            </Grid>
+        </TabItem>
+    </TabControl>
+</aml:PluginViewBase>

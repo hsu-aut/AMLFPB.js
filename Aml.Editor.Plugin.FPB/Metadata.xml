@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PlugInPackageMetaData xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                       xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <PackageName>Aml.Editor.Plugin.FPB</PackageName>
+  <DisplayName>AMLFPBjs</DisplayName>
+  <Version>0.5.0</Version>
+  <Author>VDI 3682 Project</Author>
+  <Description>AMLFPB.js — VDI 3682 FPD process modeller for the AutomationML Editor. Embeds the FPB.js diagram canvas; one viewer-tab per FPD InstanceHierarchy; live two-way sync; VDI 3682 Blatt 2 structural validation.</Description>
+  <MinimumEditorVersion>6.4.0.0</MinimumEditorVersion>
+</PlugInPackageMetaData>

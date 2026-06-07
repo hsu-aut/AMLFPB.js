@@ -1,0 +1,70 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout plugin
+        uses: actions/checkout@v4
+        with:
+          path: fpb-aml-editor-plugin
+
+      # Sibling repos — these need to live next to the plugin on the runner
+      # because the plugin uses <ProjectReference> + relative-path content
+      # references into them.
+      - name: Checkout mapper
+        uses: actions/checkout@v4
+        with:
+          repository: hsu-aut/fpb-aml-mapper
+          path: fpb-aml-mapper
+          # Mapper is public; no token needed. If it ever goes private:
+          # token: ${{ secrets.GH_PAT }}
+
+      - name: Checkout FPB.JS
+        uses: actions/checkout@v4
+        with:
+          repository: hamiedNabizada/FPB.js
+          path: FPB.JS
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Node (for FPB.JS dist)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build FPB.JS dist
+        working-directory: FPB.JS
+        run: |
+          npm ci
+          npm run build
+
+      - name: Restore + build plugin
+        working-directory: fpb-aml-editor-plugin
+        # FpbJsDistDir is overridden because the csproj default
+        # (..\..\..\FPB.JS\dist) targets a local dev layout where FPB.JS lives
+        # one level above the AML/ subdirectory. On CI all three repos are
+        # checked out side-by-side under ${{ github.workspace }}.
+        run: |
+          dotnet restore Aml.Editor.Plugin.FPB.sln
+          dotnet build Aml.Editor.Plugin.FPB.sln -c Release --no-restore /p:FpbJsDistDir="${{ github.workspace }}\FPB.JS\dist"
+
+      - name: Test
+        working-directory: fpb-aml-editor-plugin
+        run: dotnet test Aml.Editor.Plugin.FPB.Tests/Aml.Editor.Plugin.FPB.Tests.csproj -c Release --no-build
+
+      - name: Upload nupkg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Aml.Editor.Plugin.FPB-nupkg
+          path: fpb-aml-editor-plugin/build/Plugins/Aml.Editor.Plugin.FPB/Release/*.nupkg
