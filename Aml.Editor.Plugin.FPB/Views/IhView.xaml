@@ -72,6 +72,40 @@
                            Foreground="#666"
                            FontSize="13"/>
             </Border>
+            <Border x:Name="JsErrorBanner"
+                    Background="#FFF3CD"
+                    BorderBrush="#FFE69C"
+                    BorderThickness="0,0,0,1"
+                    Padding="12,8"
+                    Visibility="Collapsed"
+                    VerticalAlignment="Top">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0"
+                               Text="&#xE7BA;"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="16"
+                               Foreground="#856404"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"/>
+                    <TextBlock Grid.Column="1"
+                               x:Name="JsErrorMessage"
+                               Text=""
+                               TextWrapping="Wrap"
+                               Foreground="#856404"
+                               VerticalAlignment="Center"/>
+                    <Button Grid.Column="2"
+                            x:Name="JsErrorRetryButton"
+                            Content="Refresh from AML"
+                            Click="JsErrorRetryButton_Click"
+                            Margin="12,0,0,0"
+                            Padding="8,2"/>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

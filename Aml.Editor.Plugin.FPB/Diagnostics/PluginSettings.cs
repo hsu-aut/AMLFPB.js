@@ -24,6 +24,25 @@ public sealed class PluginSettings
     [JsonPropertyName("confirm_large_updates")]    public bool ConfirmLargeUpdates { get; set; } = true;
     [JsonPropertyName("update_safety_threshold")]  public int  UpdateSafetyThreshold { get; set; } = 5;
 
+    /// <summary>
+    /// When > 0, warn the user before applying a pending snapshot that is older
+    /// than this many minutes. Defense against stale snapshots that lingered
+    /// across a long modelling break. Set to 0 to disable.
+    /// </summary>
+    [JsonPropertyName("pending_age_warning_minutes")] public int PendingAgeWarningMinutes { get; set; } = 30;
+
+    /// <summary>
+    /// VDI 3682 validator rule IDs the user has switched off (matching
+    /// <c>IValidationRule.Id</c>, e.g. <c>"VDI3682.ProcessOperatorIdentification"</c>).
+    /// </summary>
+    [JsonPropertyName("disabled_validation_rules")] public List<string> DisabledValidationRuleIds { get; set; } = new();
+
+    /// <summary>
+    /// Lowest severity the validator surfaces. <c>"Info"</c> (all), <c>"Warning"</c>,
+    /// or <c>"Error"</c>. Defaults to Info so nothing is hidden.
+    /// </summary>
+    [JsonPropertyName("validation_min_severity")]   public string ValidationMinSeverity { get; set; } = "Info";
+
     // ── Persistence plumbing ────────────────────────────────────────────
 
     private static readonly object _gate = new();
