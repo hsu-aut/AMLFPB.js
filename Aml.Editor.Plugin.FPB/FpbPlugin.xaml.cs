@@ -10,6 +10,7 @@ using System.Windows;
 using System.Windows.Controls;
 using Aml.Editor.Plugin.Contracts;
 using Aml.Editor.Plugin.WPFBase;
+using Aml.Editor.Plugin.FPB.Bridge;
 using Aml.Editor.Plugin.FPB.Diagnostics;
 using Aml.Editor.Plugin.FPB.Views;
 using Aml.Engine.CAEX;
@@ -28,11 +29,33 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     private const int MaxStatusLogLines = 500;
 
     // A.5 — per-document state cache survives tab switches between AML files.
-    // (Pending snapshots inside individual IhViews are NOT preserved across doc
-    // switches in v1.5 — a future revision can plumb per-IH cache here.)
     private readonly Dictionary<CAEXDocument, IhView> _ihViews = new();
     private readonly List<IhView> _orderedViews = new();
     private string? _activeTheme;
+
+    /// <summary>Result of the B.3 startup self-test, surfaced in the diagnostics UI.</summary>
+    private List<ApiCompatCheck.CheckResult> _compatResults = new();
+
+    /// <summary>
+    /// Tracks the most recently rendered doc so multiple back-to-back callbacks
+    /// (DocumentLoaded + ChangeSelectedObject) don't trigger redundant rebuilds.
+    /// We deliberately do NOT use a semaphore-gate here: if WebView2 init hangs
+    /// inside a previous rebuild, the gate never releases and subsequent
+    /// rebuilds (e.g. from "+ New Process") wait forever. Without the gate,
+    /// the second caller will dedupe via _lastFullyRebuilt instead.
+    /// </summary>
+    private CAEXDocument? _lastFullyRebuilt;
+
+    // Per-IH pending-snapshot cache. Audit-v3 P2: keyed by (OriginID, IH-bare-id)
+    // instead of (CAEXDocument, IH-bare-id). The editor occasionally hot-swaps
+    // its CAEXDocument wrapper around the same file (see IsAlreadyRebuilt's
+    // OriginID-fallback), and the old reference-keyed cache silently dropped
+    // pending edits on every hot-swap because the new wrapper instance never
+    // matched. OriginID survives the swap.
+    private readonly Dictionary<(string originId, string ihId), string> _pendingCache = new();
+
+    private static string OriginIdOf(CAEXDocument? doc) =>
+        doc?.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID ?? "";
 
     public FpbPlugin()
     {
@@ -50,6 +73,21 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
         var asmVersion = typeof(FpbPlugin).Assembly.GetName().Version?.ToString(3) ?? "?";
         PluginLog.Info($"Plugin v{asmVersion} constructing. Log file: {PluginLog.FilePath}");
         PluginLog.Debug($"Settings file: {PluginSettings.FilePath} (debug={_settings.DebugLogging})");
+
+        // B.3 startup self-test — log a compact compatibility report so any
+        // silent API drift in the editor or Aml.Engine shows up at startup
+        // instead of when the affected feature is first triggered.
+        try
+        {
+            _compatResults = ApiCompatCheck.Run();
+            foreach (var line in ApiCompatCheck.FormatReport(_compatResults).Split('\n'))
+                if (!string.IsNullOrWhiteSpace(line)) PluginLog.Info(line.TrimEnd());
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error("ApiCompatCheck threw at startup", ex);
+            _compatResults = new List<ApiCompatCheck.CheckResult>();
+        }
 
         ToolBarCommands = new List<PluginCommand>
         {
@@ -81,11 +119,44 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             if (DebugToggle != null)               DebugToggle.IsChecked               = PluginLog.DebugEnabled;
             if (AutoSaveToggle != null)            AutoSaveToggle.IsChecked            = _settings.AutoSaveAfterUpdate;
             if (ConfirmLargeUpdatesToggle != null) ConfirmLargeUpdatesToggle.IsChecked = _settings.ConfirmLargeUpdates;
+            if (SafetyThresholdInput != null)      SafetyThresholdInput.Text           = _settings.UpdateSafetyThreshold.ToString();
+
+            // B.4 — re-run the compatibility checks now that the main window's
+            // DataContext is reliably populated, then refresh the banner. The
+            // constructor-time run logs the early state; this is the one whose
+            // result the user sees.
+            try
+            {
+                _compatResults = ApiCompatCheck.Run();
+                foreach (var line in ApiCompatCheck.FormatReport(_compatResults).Split('\n'))
+                    if (!string.IsNullOrWhiteSpace(line)) PluginLog.Debug(line.TrimEnd());
+            }
+            catch (Exception ex) { PluginLog.Error("ApiCompatCheck (Loaded) threw", ex); }
+            UpdateCompatibilityBanner();
+
+            // Re-subscribe to the diagnostics stream — Unloaded detaches us
+            // (and undock/redock fires both Unloaded and Loaded on the same view).
+            PluginLog.OnLine -= OnDiagnosticsLine;  // defensive: avoid double-add
+            PluginLog.OnLine += OnDiagnosticsLine;
+
+            // Lazy document recovery. Two scenarios that the editor does NOT
+            // signal with another DocumentLoaded callback, leaving the plugin
+            // stuck on the empty placeholder until the user re-opens the file:
+            //   1) Editor restart while a document was open (session restore).
+            //   2) Undock + redock of the plugin view, which tears down the
+            //      view hierarchy via Unloaded and rebuilds it via Loaded.
+            EnsureCurrentDocumentBound();
         };
         Unloaded += (_, __) =>
         {
-            PluginLog.Debug("Plugin Unloaded — disposing IH views and unsubscribing PluginLog.");
-            DisposeAllIhViews();
+            // WPF fires Loaded/Unloaded on every visual-tree reparent — that
+            // includes when the editor switches its own active tab or just
+            // resizes panels. Disposing the IhViews here was triggering an
+            // endless rebuild cycle (Unloaded → DisposeAll → Loaded → discover
+            // → Rebuild → state accumulates in FPB.JS). Real teardown happens
+            // in ApplicationClose / DocumentUnLoaded, so leave the IH views
+            // alone here; just detach the diagnostics subscription.
+            PluginLog.Debug("Plugin Unloaded — keeping IH views (real teardown is in ApplicationClose/DocumentUnLoaded).");
             PluginLog.OnLine -= OnDiagnosticsLine;
         };
     }
@@ -110,6 +181,8 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     {
         base.ChangeSelectedObject(selectedObject);
         var doc = selectedObject?.CAEXDocument;
+        PluginLog.Debug($"ChangeSelectedObject: doc={DescribeDoc(doc)} lastPushed={DescribeDoc(_lastPushedDocument)} sameRef={ReferenceEquals(doc, _lastPushedDocument)}");
+
         if (doc != null && !ReferenceEquals(doc, _lastPushedDocument))
         {
             _currentDocument = doc;
@@ -123,12 +196,67 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
         // Selection cleared (doc == null) leaves _currentDocument alone — see audit P0 #4.
     }
 
+    private static string DescribeDoc(CAEXDocument? doc)
+    {
+        if (doc == null) return "<null>";
+        var hash = doc.GetHashCode().ToString("X8");
+        var source = doc.CAEXFile?.SourceDocumentInformation?.FirstOrDefault();
+        var origin = source?.OriginID ?? "<no-origin>";
+        return $"hash={hash},origin={origin}";
+    }
+
+    /// <summary>
+    /// Make sure the viewer is wired up to whatever document the editor has
+    /// open right now, even when no INotifyAMLDocumentLoad callback fires.
+    /// Called on every Loaded, so safe to invoke when nothing needs doing.
+    ///
+    /// Deferred to Dispatcher background priority so a doc-open in progress
+    /// finishes loading first — otherwise reflecting onto MainWindow.DataContext
+    /// while the editor is mid-load can crash Aml.Engine (it isn't thread-safe).
+    /// </summary>
+    private void EnsureCurrentDocumentBound()
+    {
+        // Case A: we still hold a document reference but Unloaded tore the IH
+        // views down. Rebuild against the same document we already know.
+        if (_currentDocument != null && _ihViews.Count == 0)
+        {
+            PluginLog.Debug("Loaded: existing document but no IH tabs — rebuilding.");
+            _lastPushedDocument = null;  // force RebuildTabsForDocumentAsync to act
+            _lastFullyRebuilt = null;
+            _ = RebuildTabsForDocumentAsync(_currentDocument);
+            return;
+        }
+
+        // Case B: cold start (editor restart, fresh plugin construction) but
+        // the editor already has a document open. The DocumentLoaded event
+        // fired before our subscription existed; ask the editor's own
+        // view-model via reflection. Defer to background priority so the
+        // editor finishes any in-flight doc load before we poke its viewmodel.
+        if (_currentDocument == null)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (_currentDocument != null) return; // DocumentLoaded raced in — abort discovery.
+                var doc = DocumentDiscoverer.TryFindCurrentDocument();
+                if (doc == null) return;
+                if (_currentDocument != null) return; // double-check after the async reflection call.
+
+                PluginLog.Info("Discovered an already-open AML document on mount — binding viewer.");
+                _currentDocument = doc;
+                _lastPushedDocument = doc;
+                _ = RebuildTabsForDocumentAsync(doc);
+            }), System.Windows.Threading.DispatcherPriority.Background);
+            return;
+        }
+    }
+
     // ── INotifyAMLDocumentLoad ──────────────────────────────────────────
 
     public event EventHandler<CAEXDocument>? IsDocumentLoaded;
 
     public void DocumentLoaded(CAEXDocument document)
     {
+        PluginLog.Debug($"DocumentLoaded: doc={DescribeDoc(document)} lastPushed={DescribeDoc(_lastPushedDocument)} sameRef={ReferenceEquals(document, _lastPushedDocument)}");
         if (document == null) { DocumentUnLoaded(); return; }
         _currentDocument = document;
         if (!ReferenceEquals(document, _lastPushedDocument))
@@ -136,21 +264,37 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             _lastPushedDocument = document;
             _ = RebuildTabsForDocumentAsync(document);
         }
-        IsDocumentLoaded?.Invoke(this, document);
+        // DO NOT invoke IsDocumentLoaded here — the editor subscribes to that
+        // event and reacts by calling DocumentLoaded() again, which would feed
+        // itself in an infinite loop (40 calls/sec observed in v0.6.4). The
+        // event is part of the INotifyAMLDocumentLoad contract for OTHER
+        // subscribers (e.g. nested plugins), not for the editor itself.
     }
 
     public void DocumentUnLoaded()
     {
+        // Document is closing for real — drop any pending-snapshot cache entries
+        // tied to it. (Undock/redock goes through DisposeAllIhViews directly and
+        // KEEPS the cache, so this method must only nuke truly-closed documents.)
+        if (_currentDocument != null)
+        {
+            var originId = OriginIdOf(_currentDocument);
+            var toRemove = _pendingCache.Keys.Where(k => k.originId == originId).ToList();
+            foreach (var k in toRemove) _pendingCache.Remove(k);
+        }
+
         DisposeAllIhViews();
         _currentDocument = null;
         _currentFilePath = null;
         _lastPushedDocument = null;
+        _lastFullyRebuilt = null;
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
     }
 
     public void ApplicationClose()
     {
         DisposeAllIhViews();
+        _pendingCache.Clear();
         try { PluginLog.Shutdown(); } catch { /* swallow */ }
     }
 
@@ -171,6 +315,60 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
 
     private async Task RebuildTabsForDocumentAsync(CAEXDocument doc)
     {
+        // Dedup by reference AND by SourceDocumentInformation OriginID because
+        // the editor occasionally hands the plugin two different CAEXDocument
+        // wrappers around the same underlying XML.
+        if (IsAlreadyRebuilt(doc))
+        {
+            PluginLog.Debug($"Rebuild skipped — already rendered: {DescribeDoc(doc)}");
+            return;
+        }
+        // Optimistically claim ownership BEFORE running so a parallel callback
+        // dedups against us. If the rebuild throws we clear the marker again
+        // AND log the exception so it's visible — fire-and-forget callers
+        // (DocumentLoaded, ChangeSelectedObject, ExecuteNewProcess) discard
+        // the returned Task with `_ =`, which would otherwise swallow the
+        // exception entirely (audit-fix #5).
+        _lastFullyRebuilt = doc;
+        PluginLog.Debug($"RebuildTabsForDocument running for {DescribeDoc(doc)}");
+        try
+        {
+            await RebuildTabsForDocumentInner(doc);
+        }
+        catch (Exception ex)
+        {
+            _lastFullyRebuilt = null;
+            PluginLog.Error($"RebuildTabsForDocument failed for {DescribeDoc(doc)}", ex);
+            try
+            {
+                if (NoIhPlaceholder != null) NoIhPlaceholder.Visibility = Visibility.Visible;
+            }
+            catch { /* UI may be unloaded */ }
+            // Deliberately NOT rethrowing — the caller is fire-and-forget by
+            // design; rethrowing only feeds the unobserved-exception path.
+        }
+    }
+
+    /// <summary>
+    /// Reference-or-origin compare. CAEXDocument wrappers around the same
+    /// file aren't always reference-equal; falling back to OriginID closes
+    /// the dedup loop.
+    /// </summary>
+    private bool IsAlreadyRebuilt(CAEXDocument doc)
+    {
+        if (_lastFullyRebuilt == null) return false;
+        if (ReferenceEquals(doc, _lastFullyRebuilt)) return true;
+        var docOrigin = doc.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID;
+        var lastOrigin = _lastFullyRebuilt.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID;
+        return !string.IsNullOrEmpty(docOrigin) && string.Equals(docOrigin, lastOrigin, StringComparison.Ordinal);
+    }
+
+    private async Task RebuildTabsForDocumentInner(CAEXDocument doc)
+    {
+        // Capture pending snapshots from the views we're about to tear down so
+        // unsaved edits survive an undock/redock or doc-switch round trip.
+        CapturePendingSnapshotsToCache();
+
         DisposeAllIhViews();
 
         var ihs = CaexToFpbJson.FindFpdInstanceHierarchies(doc).ToList();
@@ -207,6 +405,14 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             {
                 await view.BindAsync(doc, ih, label, _settings);
                 if (!string.IsNullOrEmpty(_activeTheme)) view.SendTheme(_activeTheme);
+
+                // Restore any cached pending snapshot for this (OriginID, IH) pair.
+                var key = (OriginIdOf(doc), NormalizeIhId(ih.ID));
+                if (_pendingCache.Remove(key, out var snapshot))
+                {
+                    view.RestorePendingSnapshot(snapshot);
+                    PluginLog.Info($"[{label}] Restored pending edits cached from before the tab rebuild.");
+                }
             }
             catch (Exception ex)
             {
@@ -216,6 +422,33 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
 
         if (IhTabs.Items.Count > 0) IhTabs.SelectedIndex = 0;
         PluginLog.Info($"Document opened: {ihs.Count} FPD InstanceHierarchy(ies) → {ihs.Count} viewer tab(s).");
+    }
+
+    private void CapturePendingSnapshotsToCache()
+    {
+        foreach (var view in _orderedViews)
+        {
+            try
+            {
+                var snap = view.PeekPendingSnapshot();
+                if (string.IsNullOrEmpty(snap)) continue;
+                if (view.Ih == null) continue;
+                var doc = view.Ih.CAEXDocument;
+                if (doc == null) continue;
+                _pendingCache[(OriginIdOf(doc), NormalizeIhId(view.Ih.ID))] = snap;
+            }
+            catch (Exception ex)
+            {
+                PluginLog.Error("Failed to capture pending snapshot to cache", ex);
+            }
+        }
+    }
+
+    private static string NormalizeIhId(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) return string.Empty;
+        if (id.Length >= 2 && id[0] == '{' && id[^1] == '}') return id.Substring(1, id.Length - 2);
+        return id;
     }
 
     private static void UpdateTabHeader(TabItem tab, string label, bool hasPending)
@@ -260,10 +493,27 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             var processName = string.IsNullOrWhiteSpace(dialog.Result) ? "NewProcess" : dialog.Result.Trim();
             var ihName = processName.Replace(" ", "_") + "_IH";
 
-            FpbJsonToCaex.CreateEmptyFpdInstanceHierarchy(_currentDocument, ihName, processName);
+            var newIh = FpbJsonToCaex.CreateEmptyFpdInstanceHierarchy(_currentDocument, ihName, processName);
             LogStatus($"Created empty InstanceHierarchy '{ihName}' with process '{processName}'. Press Ctrl+S to persist.");
 
-            _ = RebuildTabsForDocumentAsync(_currentDocument);
+            // The editor sometimes hot-swaps its CAEXDocument wrapper after our
+            // in-memory mutation, leaving us with a stale `_currentDocument`
+            // reference and the rebuild rendered against a doc that no longer
+            // contains the new IH. Anchor on the IH's OWN document so we
+            // always rebuild against the wrapper that actually carries the
+            // mutation.
+            var docForRebuild = newIh.CAEXDocument ?? _currentDocument;
+            _currentDocument = docForRebuild;
+            _lastPushedDocument = docForRebuild;
+
+            var fpdIhList = CaexToFpbJson.FindFpdInstanceHierarchies(docForRebuild);
+            PluginLog.Debug($"After CreateEmpty '{ihName}': fpdIHs={fpdIhList.Count} names: {string.Join(", ", fpdIhList.Select(ih => $"'{ih.Name}'"))}");
+
+            // Force rebuild even if the editor's reload already triggered one
+            // against the (stale) wrapper — clearing the dedup key picks up
+            // the new IH regardless of who got there first.
+            _lastFullyRebuilt = null;
+            _ = RebuildTabsForDocumentAsync(docForRebuild);
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
         catch (Exception ex)
@@ -297,8 +547,13 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
                 LogStatus($"Imported '{Path.GetFileName(openDialog.FileName)}' as a new InstanceHierarchy. " +
                           "Press Ctrl+S in the editor to persist.");
                 foreach (var w in importResult.Warnings) PluginLog.Warn(w);
-                // Rebuild tabs so the freshly-added IH gets its own sub-tab.
-                _ = RebuildTabsForDocumentAsync(_currentDocument);
+                // Anchor on the importer's returned doc reference so a later
+                // editor wrapper-swap doesn't strand the rebuild.
+                var docForRebuild = importResult.Value ?? _currentDocument;
+                _currentDocument = docForRebuild;
+                _lastPushedDocument = docForRebuild;
+                _lastFullyRebuilt = null;
+                _ = RebuildTabsForDocumentAsync(docForRebuild);
             }
             else
             {
@@ -385,6 +640,28 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
         }
     }
 
+    private void UpdateCompatibilityBanner()
+    {
+        if (CompatBanner == null || CompatBannerText == null) return;
+        if (_compatResults.Count == 0)
+        {
+            CompatBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+        var failed = _compatResults.Count(r => !r.Ok);
+        if (failed == 0)
+        {
+            CompatBanner.Visibility = Visibility.Collapsed;
+            return;
+        }
+        CompatBanner.Visibility = Visibility.Visible;
+        CompatBannerText.Text = $"⚠ Editor API compatibility: {failed} of {_compatResults.Count} checks failed";
+        var failedDetails = string.Join("\n",
+            _compatResults.Where(r => !r.Ok).Select(r => $"• {r.Name}: {r.Detail}"));
+        CompatBanner.ToolTip = "Startup self-test results:\n" + failedDetails +
+            "\n\nPlugin falls back to manual workflow where possible. Open the log for full output.";
+    }
+
     private void ConfirmLargeUpdatesToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (ConfirmLargeUpdatesToggle == null) return;
@@ -393,6 +670,39 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
         {
             _settings.ConfirmLargeUpdates = on;
             _settings.Save();
+        }
+    }
+
+    private void SafetyThresholdInput_LostFocus(object sender, RoutedEventArgs e)
+        => CommitSafetyThreshold();
+
+    private void SafetyThresholdInput_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == System.Windows.Input.Key.Enter)
+        {
+            CommitSafetyThreshold();
+            // Keep focus on a non-textbox so subsequent enter presses don't re-fire.
+            ConfirmLargeUpdatesToggle?.Focus();
+            e.Handled = true;
+        }
+    }
+
+    private void CommitSafetyThreshold()
+    {
+        if (SafetyThresholdInput == null) return;
+        if (int.TryParse(SafetyThresholdInput.Text, out var value) && value >= 0)
+        {
+            if (_settings.UpdateSafetyThreshold != value)
+            {
+                _settings.UpdateSafetyThreshold = value;
+                _settings.Save();
+            }
+        }
+        else
+        {
+            // Invalid input — revert displayed value to the persisted setting so
+            // the user doesn't see e.g. "abc" linger in the box.
+            SafetyThresholdInput.Text = _settings.UpdateSafetyThreshold.ToString();
         }
     }
 

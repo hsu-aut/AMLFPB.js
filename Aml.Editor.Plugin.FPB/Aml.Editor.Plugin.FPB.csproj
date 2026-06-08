@@ -6,8 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <Version>0.5.0</Version>
-    <Description>AMLFPB.js — VDI 3682 Formalised Process Description (FPD) modeller for the AutomationML Editor. Embeds the FPB.js diagram canvas inside the editor with one viewer-tab per FPD InstanceHierarchy, live two-way sync between the AML tree and the diagram, VDI 3682 Blatt 2 structural validation, "+ New Process" + Import / Export for IH-level workflows.</Description>
+    <Version>0.6.17</Version>
+    <Title>AMLFPB.js</Title>
+    <Description>AutomationML Editor plugin for editing VDI 3682 Formalised Process Description (FPD) models. Embeds the FPB.js diagram canvas with live two-way sync between the diagram and the AML tree.</Description>
     <PackageTags>AMLEditor; AMLEditorPlugin.Net; AutomationML; FPB; VDI3682</PackageTags>
     <Authors>VDI 3682 Project</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
@@ -20,13 +21,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aml.Editor.Plugin.Contract" Version="4.*">
+    <!--
+      Editor-side dependencies are pinned to exact versions. A drift here (the
+      editor publishes a 4.4 or 2.4 NuGet) silently changes the surface the
+      plugin reflects against (SaveAMLCommand, ApplicationTheme, INotifyAML
+      DocumentLoad) without compile errors, so we lock and bump manually.
+    -->
+    <PackageReference Include="Aml.Editor.Plugin.Contract" Version="[4.3.0]">
       <PrivateAssets>All</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Aml.Engine" Version="4.*">
+    <PackageReference Include="Aml.Engine" Version="[4.*, 5.0.0)">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
-    <PackageReference Include="Aml.Editor.API" Version="2.*">
+    <PackageReference Include="Aml.Editor.API" Version="[2.3.0]">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
     <PackageReference Include="Aml.Skins" Version="2.*">

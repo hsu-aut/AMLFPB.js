@@ -69,10 +69,15 @@ public static class EditorSaver
                 }
 
                 // Execute on the UI thread so WPF command-handler invariants hold.
+                // Eigene Erweiterung: time the save command — slow saves
+                // (yesterday we observed 23 s) need to be visible.
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 if (Application.Current.Dispatcher.CheckAccess())
                     cmd.Execute(null);
                 else
                     Application.Current.Dispatcher.Invoke(() => cmd.Execute(null));
+                sw.Stop();
+                PluginLog.Debug($"Editor save reflection: {vmType.Name}.{name}.Execute completed in {sw.ElapsedMilliseconds} ms (editor decides whether to actually persist).");
 
                 // P0 #1: we don't know whether the editor actually persisted —
                 // CanExecute=true does not imply IsDirty. Report the command was

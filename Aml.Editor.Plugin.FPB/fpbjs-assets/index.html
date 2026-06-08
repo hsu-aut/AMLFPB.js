@@ -253,14 +253,20 @@
           // Reset previously-imported state so the new import REPLACES rather
           // than accumulates. Without this, every IH-rename (or repeated push
           // via live-sync) stacks another project under the Layer panel.
-          try {
-            if (fpb.modeler) {
+          // Audit-v3 P4: clear _processes/_project FIRST, then attempt the
+          // diagram-js clear(). If clear() throws (corrupted state, partial
+          // dispose), the manual resets still happened — previously they
+          // were positioned after clear() and got skipped on exception,
+          // leaving stale accumulators that re-introduced the LayerPanel
+          // duplicate bug.
+          if (fpb.modeler) {
+            try { fpb.modeler._processes = []; } catch (_) {}
+            try { fpb.modeler._project = null; } catch (_) {}
+            try {
               if (typeof fpb.modeler.clear === 'function') fpb.modeler.clear();
-              fpb.modeler._processes = [];
-              fpb.modeler._project = null;
+            } catch (e) {
+              post({ type: 'log', level: 'warn', message: 'fpb.modeler.clear() threw: ' + (e && e.stack || e) });
             }
-          } catch (e) {
-            post({ type: 'log', level: 'warn', message: 'pre-import reset failed: ' + (e?.stack || e) });
           }
 
           importing = true;
