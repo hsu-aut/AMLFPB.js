@@ -46,12 +46,12 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     /// </summary>
     private CAEXDocument? _lastFullyRebuilt;
 
-    // Per-IH pending-snapshot cache. Audit-v3 P2: keyed by (OriginID, IH-bare-id)
-    // instead of (CAEXDocument, IH-bare-id). The editor occasionally hot-swaps
-    // its CAEXDocument wrapper around the same file (see IsAlreadyRebuilt's
-    // OriginID-fallback), and the old reference-keyed cache silently dropped
-    // pending edits on every hot-swap because the new wrapper instance never
-    // matched. OriginID survives the swap.
+    // Per-IH pending-snapshot cache, keyed by (OriginID, IH-bare-id) instead
+    // of (CAEXDocument, IH-bare-id). The editor occasionally hot-swaps its
+    // CAEXDocument wrapper around the same file (see IsAlreadyRebuilt's
+    // OriginID-fallback), and a reference-keyed cache would silently drop
+    // pending edits on every hot-swap because the new wrapper instance
+    // never matched. OriginID survives the swap.
     private readonly Dictionary<(string originId, string ihId), string> _pendingCache = new();
 
     private static string OriginIdOf(CAEXDocument? doc) =>
