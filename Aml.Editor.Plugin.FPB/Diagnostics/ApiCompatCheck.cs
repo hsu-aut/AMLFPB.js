@@ -88,10 +88,10 @@ public static class ApiCompatCheck
             if (vm == null) return new CheckResult { Name = "Editor save reflection",
                 Ok = false, Detail = "MainWindow.DataContext is null" };
 
-            // Audit-v3 P5: keep this list in sync with EditorSaver.CandidateProperties.
-            // Previously this skipped SaveCurrentAMLFileCommand → false-positive
-            // "Editor save reflection: degraded" on editors that only expose
-            // that fourth name.
+            // Keep this list in sync with EditorSaver.CandidateProperties.
+            // Skipping SaveCurrentAMLFileCommand would produce a false-
+            // positive "Editor save reflection: degraded" on editors that
+            // only expose that fourth name.
             foreach (var prop in new[] { "SaveAMLCommand", "SaveCommand", "SaveActiveDocumentCommand", "SaveCurrentAMLFileCommand" })
             {
                 if (vm.GetType().GetProperty(prop,

@@ -3,7 +3,7 @@
                        xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <PackageName>Aml.Editor.Plugin.FPB</PackageName>
   <DisplayName>AMLFPBjs</DisplayName>
-  <Version>0.6.17</Version>
+  <Version>0.6.19</Version>
   <Author>VDI 3682 Project</Author>
   <Description>AutomationML Editor plugin for editing VDI 3682 Formalised Process Description (FPD) models. Embeds the FPB.js diagram canvas with live two-way sync between the diagram and the AML tree.</Description>
   <MinimumEditorVersion>6.4.0.0</MinimumEditorVersion>

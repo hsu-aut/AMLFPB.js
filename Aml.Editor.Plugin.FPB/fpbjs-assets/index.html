@@ -253,7 +253,7 @@
           // Reset previously-imported state so the new import REPLACES rather
           // than accumulates. Without this, every IH-rename (or repeated push
           // via live-sync) stacks another project under the Layer panel.
-          // Audit-v3 P4: clear _processes/_project FIRST, then attempt the
+          // Clear _processes/_project FIRST, then attempt the
           // diagram-js clear(). If clear() throws (corrupted state, partial
           // dispose), the manual resets still happened — previously they
           // were positioned after clear() and got skipped on exception,

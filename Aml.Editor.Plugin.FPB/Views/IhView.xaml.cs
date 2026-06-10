@@ -112,12 +112,12 @@ public partial class IhView : UserControl, IDisposable
         _bridge.OnDiagramChanged += OnDiagramChangedFromJs;
         _bridge.OnImported += () =>
         {
-            // Audit-v2 fix #3: do NOT re-stamp _lastImportFromHost here. The
-            // pre-stamp in PushIhToWebView (line ~170) defines the start of
-            // the echo-suppression window. Re-stamping on a delayed ack
-            // (slow machines / WebView2 queue) would EXTEND that window past
-            // its intended 3-second duration and silently swallow a genuine
-            // user edit made just after the import landed.
+            // Do NOT re-stamp _lastImportFromHost here. The pre-stamp in
+            // PushIhToWebView (line ~170) defines the start of the echo-
+            // suppression window. Re-stamping on a delayed ack (slow
+            // machines / WebView2 queue) would EXTEND that window past its
+            // intended 3-second duration and silently swallow a genuine user
+            // edit made just after the import landed.
             PluginLog.Debug($"[{_ihLabel}] import acknowledged by JS (pre-stamp at PushIhToWebView remains the echo-window anchor).");
             HideJsErrorBanner();
         };
@@ -167,12 +167,13 @@ public partial class IhView : UserControl, IDisposable
         try
         {
             var result = CaexToFpbJson.Convert(_doc, _ih);
-            // Audit-v3 P1: stamp AFTER ImportJson returns successfully, not
-            // before. If ImportJson silently short-circuits (bridge not ready,
+            // Stamp AFTER ImportJson returns successfully, not before. If
+            // ImportJson silently short-circuits (bridge not ready,
             // CoreWebView2 null) or PostWebMessageAsJson throws, a pre-stamp
-            // would open a fake 3-second echo-suppression window during which
-            // a genuine user edit gets silently dropped. With the stamp after,
-            // a failed push leaves the window closed; legit edits land.
+            // would open a fake 3-second echo-suppression window during
+            // which a genuine user edit gets silently dropped. With the
+            // stamp after, a failed push leaves the window closed; legit
+            // edits land.
             _bridge.ImportJson(result.Value);
             _lastImportFromHost = DateTime.UtcNow;
             foreach (var w in result.Warnings) PluginLog.Warn($"[{_ihLabel}] {w}");
@@ -199,8 +200,7 @@ public partial class IhView : UserControl, IDisposable
     // ── Update-Button: push pending FPB.js state into the IH ──────────────
     private void UpdateButton_Click(object sender, RoutedEventArgs e)
     {
-        // Audit-v2 fix #4: every other entry point in this class checks
-        // _disposed first; UpdateButton was the only one that didn't.
+        // Every other entry point in this class checks _disposed first.
         if (_disposed || _doc == null || _ih == null) return;
         var snapshot = _pendingSnapshot;
         if (string.IsNullOrEmpty(snapshot))
@@ -252,13 +252,13 @@ public partial class IhView : UserControl, IDisposable
             var swMapper = System.Diagnostics.Stopwatch.StartNew();
             var result = FpbJsonToCaex.UpdateInPlace(_doc, snapshot, _ih, mapperOptions);
             swMapper.Stop();
-            // Audit-v2 fix #4: a re-entrant ChangeSelectedObject during the
-            // mapper call can have disposed this view. Bail out before
-            // touching now-null _doc/_ih any further.
+            // A re-entrant ChangeSelectedObject during the mapper call can
+            // have disposed this view. Bail out before touching now-null
+            // _doc/_ih any further.
             if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-mapper — view disposed during operation."); return; }
 
             _pendingSnapshot = null;
-            _pendingSnapshotTimestamp = DateTime.MinValue;
+        _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
             foreach (var w in result.Warnings) PluginLog.Warn($"[{_ihLabel}] {w}");
 
@@ -298,9 +298,10 @@ public partial class IhView : UserControl, IDisposable
         }
         catch (Exception ex)
         {
-            // Audit-v3 P3: mirror the in-try _disposed guards. If the view was
-            // disposed via a re-entrant ChangeSelectedObject during the update,
-            // showing a dialog for a now-orphaned operation just confuses the user.
+            // Mirror the in-try _disposed guards. If the view was disposed
+            // via a re-entrant ChangeSelectedObject during the update,
+            // showing a dialog for a now-orphaned operation just confuses
+            // the user.
             if (_disposed)
             {
                 PluginLog.Debug($"[{_ihLabel}] Update threw after view disposal — suppressing UI dialog. Inner: {ex.Message}");
@@ -453,7 +454,7 @@ public partial class IhView : UserControl, IDisposable
 
             PushIhToWebView();
             _pendingSnapshot = null;
-            _pendingSnapshotTimestamp = DateTime.MinValue;
+        _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
             _lastIhHash = ComputeIhHash(_ih);
 
@@ -588,7 +589,7 @@ public partial class IhView : UserControl, IDisposable
         }
         catch (Exception ex)
         {
-            // Audit-v2 fix #10: silently returning "" used to mask repeated
+            // Silently returning "" used to mask repeated
             // SHA256 failures — LiveSyncTick's `hash == _lastIhHash` check
             // would then see ""=="" and skip refresh forever. Log the failure
             // so it's at least diagnosable.
@@ -654,7 +655,7 @@ public partial class IhView : UserControl, IDisposable
         try { _bridge?.Dispose(); } catch { /* best effort */ }
         _bridge = null;
         _pendingSnapshot = null;
-            _pendingSnapshotTimestamp = DateTime.MinValue;
+        _pendingSnapshotTimestamp = DateTime.MinValue;
         _doc = null;
         _ih = null;
     }
