@@ -80,7 +80,7 @@ public static class Vdi3682Validator
         CaexElementWalker.WalkInternalElements(doc, ie =>
         {
             if (ie.RefBaseSystemUnitPath == sucPath && !string.IsNullOrEmpty(ie.ID))
-                set.Add(ie.ID);
+                set.Add(ie.ID.Trim('{', '}')); // brace-free: refObj stores the uniqueIdent form
         });
         return set;
     }
