@@ -60,6 +60,14 @@ public static class Vdi3682Validator
             }
         }
 
+        // OCL pass: the published VDI 3682 Blatt 3 constraints, executed by the
+        // OclNet engine. Adds the catalogue rules the hard-coded set never covered
+        // (uniqueness, naming, orphans, self-references, …); overlapping rules are
+        // deduplicated inside the rule set. The hard-coded rules above remain the
+        // fallback when this is switched off.
+        if (options.UseOclEngine)
+            Vdi3682OclRuleSet.Append(doc, options, findings);
+
         // Filter by minimum severity threshold (e.g. show only Errors).
         if (options.MinimumSeverity > ValidationSeverity.Info)
             findings = findings.Where(f => f.Severity >= options.MinimumSeverity).ToList();
@@ -102,6 +110,13 @@ public sealed class ValidationOptions
 
     /// <summary>Lowest severity to include in the result list. Default = Info (all).</summary>
     public ValidationSeverity MinimumSeverity { get; init; } = ValidationSeverity.Info;
+
+    /// <summary>
+    /// Run the OCL engine pass (the published VDI 3682 Blatt 3 constraints via
+    /// OclNet) in addition to the hard-coded rules. Default on; switch off to fall
+    /// back to the hard-coded rules only.
+    /// </summary>
+    public bool UseOclEngine { get; init; } = true;
 
     public bool IsRuleDisabled(string ruleId) => DisabledRuleIds.Contains(ruleId);
 }
