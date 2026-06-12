@@ -45,7 +45,7 @@ public static class Vdi3682OclRuleSet
         ["TechnicalResourceNamed"] = Ocl.ValidationSeverity.Info,                  // D5
         ["ProcessNamed"] = Ocl.ValidationSeverity.Warning,                         // D6
         ["LongNameMandatory"] = Ocl.ValidationSeverity.Error,                      // D7
-        ["VersionRevisionOptional"] = Ocl.ValidationSeverity.Info,                 // D8
+        ["VersionRevisionPresent"] = Ocl.ValidationSeverity.Warning,               // D8 (Blatt 2 Bild 4: Kardinalität 1)
         ["RefObjResolvable"] = Ocl.ValidationSeverity.Error,                       // F1
         ["RefProcessResolvable"] = Ocl.ValidationSeverity.Error,                   // F2
         ["AllReferencesResolvable"] = Ocl.ValidationSeverity.Error,                // F3
