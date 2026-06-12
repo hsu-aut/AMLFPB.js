@@ -65,16 +65,19 @@ public static class Vdi3682OclRuleSet
         "ProcessOperatorNamed",                // VDI3682.ProcessOperatorIdentification
         "FlowEndpointsTyped",                  // VDI3682.FlowEndpointTyping
         "UsageEndpointsTyped",                 // VDI3682.FlowEndpointTyping
-        "FlowDirected",                        // VDI3682.FlowEndpointTyping (interface pairing)
+        "FlowDirected",                        // VDI3682.InternalLinkInterface (FlowOut/FlowIn-Paarung über kanonische Pfade)
     };
 
+    // PublicationOnly: a transient failure in the factory (e.g. resource IO) is NOT
+    // cached — the default mode would freeze the first exception for the whole
+    // editor session and kill the OCL pass permanently.
     private static readonly Lazy<(Ocl.OclValidator Validator, Ocl.CompiledRuleSet Runtime)> Compiled = new(() =>
     {
         var validator = new Ocl.OclValidator();
         var specs = LoadRuleSpecs(includeHardcodedCovered: false);
         var definitions = new OclParser().ParseDefinitions(ReadResource("OclRules.vdi3682-helpers.ocl"));
         return (validator, validator.Compile(specs, definitions));
-    });
+    }, LazyThreadSafetyMode.PublicationOnly);
 
     /// <summary>
     /// Build the rule specs from the embedded artifact. Exposed so tests can run the
@@ -86,7 +89,19 @@ public static class Vdi3682OclRuleSet
         var specs = new List<Ocl.OclRuleSpec>();
         foreach (var block in SplitRules(ReadResource("OclRules.vdi3682-pure-rules.ocl")))
         {
-            var name = parser.ParseConstraint(block).Name ?? "?";
+            // Per-block isolation: a single malformed rule must not take down the
+            // whole rule set — the name is recovered via regex and the block is kept,
+            // so OclValidator.Compile reports its parse error as a per-rule finding.
+            string name;
+            try
+            {
+                name = parser.ParseConstraint(block).Name ?? "?";
+            }
+            catch (OclParseException)
+            {
+                name = System.Text.RegularExpressions.Regex.Match(block, @"inv\s+(\w+)").Groups[1].Value;
+                if (string.IsNullOrEmpty(name)) name = "ParseError";
+            }
             if (!includeHardcodedCovered && CoveredByHardcoded.Contains(name)) continue;
             specs.Add(new Ocl.OclRuleSpec(
                 RuleIdPrefix + name,
@@ -111,6 +126,12 @@ public static class Vdi3682OclRuleSet
         try
         {
             var model = new CaexMetamodel(doc);
+
+            // A document without any FPD process is none of our business — without
+            // this guard, ProjectMinimumProcess would flag every foreign AML file
+            // opened in the editor as an Error.
+            if (!model.InstancesOf("FPD_Process").Any()) return;
+
             var (validator, rules) = Compiled.Value;
 
             foreach (var f in validator.Validate(model, rules))
@@ -136,14 +157,18 @@ public static class Vdi3682OclRuleSet
         }
     }
 
-    /// <summary>Scope the unclassified warning to FPD content — foreign IHs in a mixed AML document are none of our business.</summary>
+    /// <summary>
+    /// Scope the unclassified warning to FPD content — foreign IHs in a mixed AML
+    /// document are none of our business. Uses the type registry (SUC path OR role
+    /// requirements), so role-typed FPD processes are recognised too.
+    /// </summary>
     private static bool IsInsideFpdProcess(InternalElementType element)
     {
+        var registry = new FpdTypeRegistry();
         var current = element.CAEXParent as InternalElementType;
         while (current is not null)
         {
-            if (current.RefBaseSystemUnitPath?.EndsWith("/FPD_Process", StringComparison.Ordinal) == true)
-                return true;
+            if (registry.IsKindOf(current, registry.ProcessTypeName)) return true;
             current = current.CAEXParent as InternalElementType;
         }
         return false;
