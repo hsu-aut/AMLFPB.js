@@ -60,11 +60,11 @@ public static class Vdi3682Validator
             }
         }
 
-        // OCL pass: the published VDI 3682 Blatt 3 constraints, executed by the
-        // OclNet engine. Adds the catalogue rules the hard-coded set never covered
-        // (uniqueness, naming, orphans, self-references, …); overlapping rules are
-        // deduplicated inside the rule set. The hard-coded rules above remain the
-        // fallback when this is switched off.
+        // OCL pass: the FPD validation rule set, executed by the OCL.NET engine.
+        // Adds the rules the hard-coded set never covered (uniqueness, naming,
+        // orphans, self-references, …); overlapping rules are deduplicated inside
+        // the rule set. The hard-coded rules above remain the fallback when this
+        // is switched off.
         if (options.UseOclEngine)
             Vdi3682OclRuleSet.Append(doc, options, findings);
 
@@ -112,9 +112,9 @@ public sealed class ValidationOptions
     public ValidationSeverity MinimumSeverity { get; init; } = ValidationSeverity.Info;
 
     /// <summary>
-    /// Run the OCL engine pass (the published VDI 3682 Blatt 3 constraints via
-    /// OclNet) in addition to the hard-coded rules. Default on; switch off to fall
-    /// back to the hard-coded rules only.
+    /// Run the OCL engine pass (the FPD validation rule set via OCL.NET) in
+    /// addition to the hard-coded rules. Default on; switch off to fall back to
+    /// the hard-coded rules only.
     /// </summary>
     public bool UseOclEngine { get; init; } = true;
 

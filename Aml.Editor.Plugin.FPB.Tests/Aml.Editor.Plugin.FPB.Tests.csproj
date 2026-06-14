@@ -23,10 +23,10 @@
     <!-- Plugin's reference to FpbMapper.Conversion is PrivateAssets=all (packaging concern),
          so the tests need their own direct reference to see the mapper API. -->
     <ProjectReference Include="..\..\fpb-aml-mapper\dotnet\FpbMapper.Conversion\FpbMapper.Conversion.csproj" />
-    <!-- OclNet engine: prove the published OCL constraints produce findings identical
-         to the hard-coded VDI 3682 rules. -->
-    <ProjectReference Include="..\..\..\OclNet\src\OclNet.Core\OclNet.Core.csproj" />
-    <ProjectReference Include="..\..\..\OclNet\src\OclNet.Caex\OclNet.Caex.csproj" />
+    <!-- OCL.NET engine: prove the FPD OCL rules produce findings identical
+         to the hard-coded rules. -->
+    <ProjectReference Include="..\..\..\OclNet\src\OCL.NET.Core\OCL.NET.Core.csproj" />
+    <ProjectReference Include="..\..\..\OclNet\src\OCL.NET.Caex\OCL.NET.Caex.csproj" />
   </ItemGroup>
 
   <ItemGroup>

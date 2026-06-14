@@ -1,31 +1,31 @@
-using System.IO;
-using System.Reflection;
 using Aml.Engine.CAEX;
-using OclNet.Caex;
-using OclNet.Core.Parser;
-using Ocl = OclNet.Core.Validation;
+using FpbMapper.Conversion;
+using OCL.NET.Caex;
+using OCL.NET.Core.Parser;
+using Ocl = OCL.NET.Core.Validation;
 
 namespace Aml.Editor.Plugin.FPB.Validation;
 
 /// <summary>
-/// The OCL validation pass: executes the published VDI 3682 Blatt 3 rule artifacts
-/// (<c>vdi3682-pure-rules.ocl</c> + <c>vdi3682-helpers.ocl</c>, embedded from the
-/// OclNet spec — not inline copies) through the OclNet engine and appends the
-/// findings to the structural validator's list.
+/// The OCL validation pass: runs the FPD OCL rule set
+/// (<see cref="FpbValidationRules.PureRules"/> + <see cref="FpbValidationRules.Helpers"/>,
+/// shipped from FpbMapper.Conversion so plugin and web backend share the same
+/// source) through the OCL.NET engine and appends the findings to the structural
+/// validator's list.
 ///
 /// Rules whose ground the hard-coded <see cref="IValidationRule"/>s already cover
 /// are skipped by default to avoid duplicate findings; the hard-coded rules stay
 /// authoritative (and act as the fallback when the OCL pass is disabled via
 /// <see cref="ValidationOptions.UseOclEngine"/>). The OCL pass therefore *adds*
-/// the catalogue rules that were never hard-coded (uniqueness, naming, orphan
-/// detection, self-references, …).
+/// the rules that were never hard-coded (uniqueness, naming, orphan detection,
+/// self-references, …).
 /// </summary>
 public static class Vdi3682OclRuleSet
 {
     public const string RuleIdPrefix = "VDI3682.OCL.";
     public const string UnclassifiedRuleId = RuleIdPrefix + "UnclassifiedElement";
 
-    /// <summary>Severity per catalogue rule (VDI 3682 Blatt 3 Regelkatalog), keyed by invariant name.</summary>
+    /// <summary>Severity per rule, keyed by invariant name. See the FPD validation rule set.</summary>
     private static readonly Dictionary<string, Ocl.ValidationSeverity> CatalogueSeverity = new(StringComparer.Ordinal)
     {
         ["ProjectMinimumProcess"] = Ocl.ValidationSeverity.Error,                  // A1
@@ -75,7 +75,7 @@ public static class Vdi3682OclRuleSet
     {
         var validator = new Ocl.OclValidator();
         var specs = LoadRuleSpecs(includeHardcodedCovered: false);
-        var definitions = new OclParser().ParseDefinitions(ReadResource("OclRules.vdi3682-helpers.ocl"));
+        var definitions = new OclParser().ParseDefinitions(FpbValidationRules.Helpers);
         return (validator, validator.Compile(specs, definitions));
     }, LazyThreadSafetyMode.PublicationOnly);
 
@@ -87,7 +87,7 @@ public static class Vdi3682OclRuleSet
     {
         var parser = new OclParser();
         var specs = new List<Ocl.OclRuleSpec>();
-        foreach (var block in SplitRules(ReadResource("OclRules.vdi3682-pure-rules.ocl")))
+        foreach (var block in SplitRules(FpbValidationRules.PureRules))
         {
             // Per-block isolation: a single malformed rule must not take down the
             // whole rule set — the name is recovered via regex and the block is kept,
@@ -106,15 +106,15 @@ public static class Vdi3682OclRuleSet
             specs.Add(new Ocl.OclRuleSpec(
                 RuleIdPrefix + name,
                 CatalogueSeverity.GetValueOrDefault(name, Ocl.ValidationSeverity.Warning),
-                "VDI 3682 Blatt 3",
+                "FPD validation rule set",
                 block));
         }
         return specs;
     }
 
     /// <summary>The helper <c>def:</c> operations from the embedded artifact (for tests running the engine directly).</summary>
-    public static IReadOnlyList<OclNet.Core.Ast.OclOperationDef> LoadDefinitions() =>
-        new OclParser().ParseDefinitions(ReadResource("OclRules.vdi3682-helpers.ocl"));
+    public static IReadOnlyList<OCL.NET.Core.Ast.OclOperationDef> LoadDefinitions() =>
+        new OclParser().ParseDefinitions(FpbValidationRules.Helpers);
 
     /// <summary>
     /// Run the OCL pass over <paramref name="doc"/> and append plugin findings.
@@ -187,11 +187,4 @@ public static class Vdi3682OclRuleSet
             .Select(b => b.Trim())
             .Where(b => b.StartsWith("context", StringComparison.Ordinal));
 
-    private static string ReadResource(string logicalName)
-    {
-        using var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(logicalName)
-            ?? throw new InvalidOperationException($"embedded OCL resource '{logicalName}' not found");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
 }

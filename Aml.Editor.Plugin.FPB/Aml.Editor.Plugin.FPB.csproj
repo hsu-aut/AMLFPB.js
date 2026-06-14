@@ -51,33 +51,23 @@
     <ProjectReference Include="..\..\fpb-aml-mapper\dotnet\FpbMapper.Conversion\FpbMapper.Conversion.csproj">
       <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
-    <!-- OclNet engine: executes the published VDI 3682 Blatt 3 OCL constraints at
-         runtime (Vdi3682Validator's OCL pass, toggle: ValidationOptions.UseOclEngine). -->
-    <ProjectReference Include="..\..\..\OclNet\src\OclNet.Core\OclNet.Core.csproj">
+    <!-- OCL.NET engine: executes the FPD OCL rule set at runtime
+         (Vdi3682Validator's OCL pass, toggle: ValidationOptions.UseOclEngine).
+         The rule files themselves live in FpbMapper.Conversion. -->
+    <ProjectReference Include="..\..\..\OclNet\src\OCL.NET.Core\OCL.NET.Core.csproj">
       <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\OclNet\src\OclNet.Caex\OclNet.Caex.csproj">
+    <ProjectReference Include="..\..\..\OclNet\src\OCL.NET.Caex\OCL.NET.Caex.csproj">
       <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- The published OCL rule artifacts ship inside the plugin assembly — the
-         runtime validates against the exact spec files, not inline copies. -->
-    <EmbeddedResource Include="..\..\..\OclNet\spec\vdi3682-pure-rules.ocl">
-      <LogicalName>OclRules.vdi3682-pure-rules.ocl</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="..\..\..\OclNet\spec\vdi3682-helpers.ocl">
-      <LogicalName>OclRules.vdi3682-helpers.ocl</LogicalName>
-    </EmbeddedResource>
   </ItemGroup>
 
   <!-- ─── Bundle DLLs into nupkg (from $(OutputPath), all guaranteed by the build) ── -->
   <ItemGroup>
     <None Include="$(OutputPath)$(AssemblyName).deps.json" Pack="true" PackagePath="lib\$(TargetFramework)" />
     <None Include="$(OutputPath)FpbMapper.Conversion.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
-    <None Include="$(OutputPath)OclNet.Core.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
-    <None Include="$(OutputPath)OclNet.Caex.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="$(OutputPath)OCL.NET.Core.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="$(OutputPath)OCL.NET.Caex.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
     <None Include="$(OutputPath)Antlr4.Runtime.Standard.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
     <None Include="Metadata.xml" CopyToOutputDirectory="PreserveNewest" />
 

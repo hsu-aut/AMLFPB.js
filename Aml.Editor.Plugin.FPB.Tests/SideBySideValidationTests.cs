@@ -1,8 +1,8 @@
 using Aml.Editor.Plugin.FPB.Validation;        // hard-coded Vdi3682Validator + Vdi3682OclRuleSet
 using Aml.Engine.CAEX;
 using FpbMapper.Conversion;                     // FpbJsonToCaex
-using OclNet.Caex;                              // CaexMetamodel
-using Ocl = OclNet.Core.Validation;             // OclValidator
+using OCL.NET.Caex;                             // CaexMetamodel
+using Ocl = OCL.NET.Core.Validation;            // OclValidator
 using Xunit;
 
 namespace Aml.Editor.Plugin.FPB.Tests;
