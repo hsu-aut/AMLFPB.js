@@ -89,6 +89,25 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             _compatResults = new List<ApiCompatCheck.CheckResult>();
         }
 
+        // Eager-compile the OCL rule set at startup so the first validation pass
+        // does not pay the parse/compile latency — important for the smoothness
+        // of the live demo. Failures surface in the startup log next to the
+        // ApiCompatCheck banner.
+        try
+        {
+            if (Validation.Vdi3682OclRuleSet.EnsureCompiled())
+                PluginLog.Info("OCL rule set: compiled OK at startup.");
+            else
+                PluginLog.Error("OCL rule set: compile FAILED at startup. "
+                    + "The structural validator stays available; the OCL pass will "
+                    + "report a single warning until the cause is resolved. "
+                    + $"Cause: {Validation.Vdi3682OclRuleSet.CompileError?.Message}");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error("OCL EnsureCompiled threw at startup", ex);
+        }
+
         ToolBarCommands = new List<PluginCommand>
         {
             // Toolbar contains the two cross-IH actions — actions that produce a

@@ -80,6 +80,33 @@ public static class Vdi3682OclRuleSet
     }, LazyThreadSafetyMode.PublicationOnly);
 
     /// <summary>
+    /// Last error raised by <see cref="EnsureCompiled"/>, or <c>null</c> when the
+    /// most recent compile attempt succeeded.
+    /// </summary>
+    public static Exception? CompileError { get; private set; }
+
+    /// <summary>
+    /// Eagerly parse + compile the rule set so the first live validation doesn't
+    /// pay the parse/compile latency. Returns <c>true</c> if the engine is ready.
+    /// Safe to call multiple times; a transient failure clears the cache (see
+    /// PublicationOnly above), so the next call retries from scratch.
+    /// </summary>
+    public static bool EnsureCompiled()
+    {
+        try
+        {
+            _ = Compiled.Value;
+            CompileError = null;
+            return true;
+        }
+        catch (Exception ex)
+        {
+            CompileError = ex;
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Build the rule specs from the embedded artifact. Exposed so tests can run the
     /// exact runtime rule source (incl. the hard-coded-covered rules for parity checks).
     /// </summary>
