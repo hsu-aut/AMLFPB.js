@@ -562,11 +562,19 @@ public partial class IhView : UserControl, IDisposable
 
             // Conflict: user has unsynced FPB.js edits AND the AML tree changed.
             // Drop pending and warn so we don't later silently overwrite the tree.
+            // Before dropping, dump the snapshot to a TEMP backup so the user has
+            // a recovery path if the discarded edits were valuable.
             if (!string.IsNullOrEmpty(_pendingSnapshot))
             {
-                PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while FPB.js had unsynced edits — pending viewer edits dropped. " +
-                               $"hash-before={hashBefore:X8} hash-now={hash:X8} pending-bytes={_pendingSnapshot.Length}");
-                SetStatus("Tree changed externally — pending viewer edits dropped.");
+                var backupPath = TryWritePendingBackup(_pendingSnapshot);
+                var locationHint = backupPath is null
+                    ? string.Empty
+                    : $" Backup written to {backupPath}.";
+
+                PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while FPB.js had unsynced edits — pending viewer edits dropped." +
+                               locationHint +
+                               $" hash-before={hashBefore:X8} hash-now={hash:X8} pending-bytes={_pendingSnapshot.Length}");
+                SetStatus("Tree changed externally — pending viewer edits dropped." + locationHint);
                 _pendingSnapshot = null;
                 _pendingSnapshotTimestamp = DateTime.MinValue;
                 OnPendingStateChanged();
@@ -582,6 +590,30 @@ public partial class IhView : UserControl, IDisposable
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] live-sync tick failed", ex);
+        }
+    }
+
+    /// <summary>
+    /// Persist a pending FPB.js snapshot to <c>%TEMP%\fpb-plugin\pending-backup\</c>
+    /// when live-sync is about to discard it because the AML tree changed
+    /// externally. Returns the backup file path on success, null on failure
+    /// (the calling path stays running either way — recovery is best-effort).
+    /// </summary>
+    private string? TryWritePendingBackup(string snapshotJson)
+    {
+        try
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "fpb-plugin", "pending-backup");
+            Directory.CreateDirectory(dir);
+            var fileName = $"pending-{SanitiseFileName(_ihLabel)}-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            var path = Path.Combine(dir, fileName);
+            File.WriteAllText(path, snapshotJson, System.Text.Encoding.UTF8);
+            return path;
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warn($"[{_ihLabel}] Pending-snapshot backup failed: {ex.Message}");
+            return null;
         }
     }
 
