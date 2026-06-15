@@ -4,10 +4,12 @@
 // Lifecycle is owned by FpbPlugin which creates an IhView per FPD-bearing IH
 // on DocumentLoaded and disposes them on DocumentUnLoaded.
 
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Aml.Editor.Plugin.FPB.Bridge;
 using Aml.Editor.Plugin.FPB.Diagnostics;
@@ -75,9 +77,13 @@ public partial class IhView : UserControl, IDisposable
         SetStatus("Restored pending edits from before the document switch — click Update InstanceHierarchy to apply, Refresh from AML to discard.");
     }
 
+    /// <summary>VDI 3682 findings shown in the bottom DataGrid. Refreshed at every Update / Refresh cycle.</summary>
+    private readonly ObservableCollection<FindingRow> _findings = new();
+
     public IhView()
     {
         InitializeComponent();
+        FindingsGrid.ItemsSource = _findings;
     }
 
     /// <summary>
@@ -600,11 +606,17 @@ public partial class IhView : UserControl, IDisposable
 
     private void RunVdiValidationIfEnabled()
     {
-        if (!_settings.RunVdiValidation || _doc == null) return;
+        if (!_settings.RunVdiValidation || _doc == null)
+        {
+            UpdateFindingsUi(Array.Empty<ValidationFinding>());
+            return;
+        }
         try
         {
             var options = BuildValidationOptions(_settings);
             var findings = Vdi3682Validator.ValidateStructured(_doc, options);
+            UpdateFindingsUi(findings);
+
             if (findings.Count == 0)
             {
                 PluginLog.Debug($"[{_ihLabel}] VDI 3682 validation: clean.");
@@ -613,7 +625,7 @@ public partial class IhView : UserControl, IDisposable
             var errors   = findings.Count(f => f.Severity == ValidationSeverity.Error);
             var warnings = findings.Count(f => f.Severity == ValidationSeverity.Warning);
             var infos    = findings.Count(f => f.Severity == ValidationSeverity.Info);
-            SetStatus($"VDI 3682: {errors} error(s), {warnings} warning(s), {infos} info — see verbose log.");
+            SetStatus($"VDI 3682: {errors} error(s), {warnings} warning(s), {infos} info — see Findings panel.");
             foreach (var f in findings)
             {
                 var prefix = $"VDI3682 [{f.Severity}] {f.RuleId}";
@@ -626,6 +638,47 @@ public partial class IhView : UserControl, IDisposable
         {
             PluginLog.Error($"[{_ihLabel}] VDI validation threw", ex);
         }
+    }
+
+    /// <summary>
+    /// Mirror the latest findings into the bottom DataGrid + the summary label.
+    /// Marshalled to the UI thread because validation may run off-thread later.
+    /// </summary>
+    private void UpdateFindingsUi(IReadOnlyList<ValidationFinding> findings)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => UpdateFindingsUi(findings));
+            return;
+        }
+
+        _findings.Clear();
+        foreach (var f in findings) _findings.Add(FindingRow.From(f, _doc));
+
+        if (findings.Count == 0)
+        {
+            FindingsSummary.Text = " — no findings";
+        }
+        else
+        {
+            var e = findings.Count(f => f.Severity == ValidationSeverity.Error);
+            var w = findings.Count(f => f.Severity == ValidationSeverity.Warning);
+            var i = findings.Count(f => f.Severity == ValidationSeverity.Info);
+            FindingsSummary.Text = $" — {e} error · {w} warning · {i} info";
+        }
+    }
+
+    /// <summary>
+    /// Double-click on a finding asks the viewer to focus the corresponding
+    /// element. Bridge.SelectElement no-ops gracefully when the id is unknown
+    /// to the JS side (e.g. a project-level finding without an element id).
+    /// </summary>
+    private void FindingsGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_disposed || _bridge == null) return;
+        if (FindingsGrid.SelectedItem is not FindingRow row) return;
+        if (string.IsNullOrEmpty(row.ElementId)) return;
+        _bridge.SelectElement(row.ElementId);
     }
 
     private static ValidationOptions BuildValidationOptions(PluginSettings settings)

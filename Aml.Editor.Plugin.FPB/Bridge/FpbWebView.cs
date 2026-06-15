@@ -166,6 +166,22 @@ public sealed class FpbWebView : IDisposable
     }
 
     /// <summary>
+    /// Ask the viewer to select an element by id and scroll it into view. Used
+    /// by host panels (findings DataGrid, AML tree integration, …). Silently
+    /// no-ops if the bridge isn't ready yet — a missing select is recoverable,
+    /// the next user interaction will work.
+    /// </summary>
+    public void SelectElement(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return;
+        if (_disposed) return;
+        if (!_ready || _view.CoreWebView2 == null) return;
+
+        var envelope = JsonSerializer.Serialize(SelectElementMessage.For(id));
+        _view.CoreWebView2.PostWebMessageAsJson(envelope);
+    }
+
+    /// <summary>
     /// Fired when JS posts an <c>imported</c> acknowledgement. The plugin uses this
     /// to stamp its echo-suppression window: any <c>changed</c> event arriving in the
     /// next short interval is the natural fallout of our own ImportJson, not a user edit.

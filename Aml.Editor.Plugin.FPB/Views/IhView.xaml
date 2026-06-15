@@ -12,6 +12,8 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="160" MinHeight="60"/>
         </Grid.RowDefinitions>
 
         <!-- Local toolbar: compact icon buttons matching the editor's native side
@@ -106,6 +108,80 @@
                             Padding="8,2"/>
                 </Grid>
             </Border>
+        </Grid>
+
+        <!-- Splitter between the viewer and the findings list. Users can drag it
+             to enlarge / collapse the findings pane. -->
+        <GridSplitter Grid.Row="2"
+                      Height="3"
+                      HorizontalAlignment="Stretch"
+                      VerticalAlignment="Center"
+                      Background="#DDDDDD"
+                      ShowsPreview="True"/>
+
+        <!-- Findings pane: live VDI 3682 validation results for this IH. Double-
+             clicking a row asks the viewer to select + scroll to the element. -->
+        <Grid Grid.Row="3">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <Border Grid.Row="0"
+                    Background="#F4F4F4"
+                    BorderBrush="#DDDDDD"
+                    BorderThickness="0,1,0,1"
+                    Padding="8,4">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE721;"
+                               FontFamily="Segoe MDL2 Assets"
+                               FontSize="13"
+                               Foreground="#666"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0"/>
+                    <TextBlock Text="VDI 3682 Findings"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                    <TextBlock x:Name="FindingsSummary"
+                               Text=" — no findings"
+                               Foreground="#666"
+                               VerticalAlignment="Center"
+                               Margin="6,0,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <DataGrid Grid.Row="1"
+                      x:Name="FindingsGrid"
+                      AutoGenerateColumns="False"
+                      CanUserAddRows="False"
+                      CanUserDeleteRows="False"
+                      IsReadOnly="True"
+                      HeadersVisibility="Column"
+                      GridLinesVisibility="Horizontal"
+                      SelectionMode="Single"
+                      SelectionUnit="FullRow"
+                      RowHeight="22"
+                      FontSize="12"
+                      MouseDoubleClick="FindingsGrid_MouseDoubleClick">
+                <DataGrid.Columns>
+                    <DataGridTemplateColumn Header="" Width="32" SortMemberPath="SeverityRank">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding SeverityGlyph}"
+                                           FontFamily="Segoe MDL2 Assets"
+                                           FontSize="14"
+                                           Foreground="{Binding SeverityBrush}"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           ToolTip="{Binding SeverityName}"/>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="Rule" Binding="{Binding RuleId}" Width="220"/>
+                    <DataGridTextColumn Header="Element" Binding="{Binding ElementLabel}" Width="160"/>
+                    <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
+                </DataGrid.Columns>
+            </DataGrid>
         </Grid>
     </Grid>
 </UserControl>
