@@ -1,0 +1,69 @@
+catalog_id,title,category,bucket,ocl_constraint,note
+A1,Project-Process-Kardinalität,Cardinality,PURE_OCL_LIVE,ProjectMinimumProcess,
+A2,SystemLimit-Kardinalität,Cardinality,PURE_OCL_LIVE,SystemLimitCardinality,
+A3,State-Mindest-Kardinalität,Cardinality,PURE_OCL_LIVE,StateMinimumCardinality,
+A4,ProcessOperator-Mindest-Kard.,Cardinality,PURE_OCL_LIVE,ProcessOperatorMinimumCardinality,
+A5,TechnicalResource-Kardinalität,Cardinality,OPEN_PHASE2_OR_INFORMATIVE,,"informativ, keine Validierung"
+B1,State innerhalb SystemLimit,Geometry,OPEN_PLUGIN_GEOMETRY,StateWithinSystemLimit,Plugin-Layer
+B2,PO innerhalb SystemLimit,Geometry,OPEN_PLUGIN_GEOMETRY,ProcessOperatorWithinSystemLimit,Plugin-Layer
+B3,TR außerhalb SystemLimit,Geometry,OPEN_PLUGIN_GEOMETRY,TechnicalResourceOutsideSystemLimit,Plugin-Layer
+B4,SystemLimit umfasst Inhalt,Geometry,OPEN_PLUGIN_GEOMETRY,SystemLimitBoundingContainer,Plugin-Layer
+B5,Keine Überlappung SL ↔ TR,Geometry,OPEN_PLUGIN_GEOMETRY,SystemLimitTechnicalResourceNoOverlap,Plugin-Layer
+B6,Boundary-State auf SL-Rand,Geometry,OPEN_PLUGIN_GEOMETRY,BoundaryStateOnSystemLimitBorder,Plugin-Layer
+C1,Flow State↔PO,Connection,PURE_OCL_LIVE,FlowEndpointsTyped,
+C2,Kein Flow State→State,Connection,PURE_OCL_LIVE,NoStateToStateFlow,
+C3,Kein Flow PO→PO,Connection,PURE_OCL_LIVE,NoProcessOperatorToProcessOperatorFlow,
+C4,Usage PO↔TR,Connection,PURE_OCL_LIVE,UsageEndpointsTyped,
+C5,Keine doppelten Connections,Connection,PURE_OCL_LIVE,NoDuplicateConnections,
+C6,Flow ist directed,Connection,PURE_OCL_LIVE,FlowDirected,
+C7,Kanonische FPD-Interfaces,Connection,OPEN_PHASE2_OR_INFORMATIVE,CanonicalFpdInterfaces,durch Mapper sichergestellt
+C8,ParallelFlow-Konsistenz,Connection,OPEN_PHASE2_OR_INFORMATIVE,,Phase 2: requires-pair semantics
+C9,Keine gemischten Flow-Typen,Connection,PURE_OCL_LIVE,NoMixedFlowTypes,
+C10,AlternativeFlow-Konsistenz,Connection,OPEN_PHASE2_OR_INFORMATIVE,,Phase 2: requires-pair semantics
+D1,uniqueIdent-Unikalität,Identity,PURE_OCL_LIVE,UniqueIdentifiers,
+D2,IDs unikal in Hierarchie,Identity,OPEN_PHASE2_OR_INFORMATIVE,UniqueIdsInHierarchy,Phase 2: cross-IH scope
+D3,PO benannt,Identity,PURE_OCL_LIVE,ProcessOperatorNamed,
+D4,State benannt,Identity,PURE_OCL_LIVE,StateNamed,
+D5,TR benannt,Identity,PURE_OCL_LIVE,TechnicalResourceNamed,
+D6,Process benannt,Identity,PURE_OCL_LIVE,ProcessNamed,
+D7,longName pflicht,Identity,PURE_OCL_LIVE,LongNameMandatory,
+D8,Version+Revision vorhanden,Identity,PURE_OCL_LIVE,VersionRevisionPresent,
+E1,Characteristic.category vorh.,Characteristics,PHASE2_OCL_PENDING,CharacteristicCategoryPresent,Phase-2-Binding pending
+E2,Characteristic.descriptive vorh.,Characteristics,PHASE2_OCL_PENDING,CharacteristicDescriptivePresent,Phase-2-Binding pending
+E3,Value entspricht DataType,Characteristics,OPEN_PHASE2_OR_INFORMATIVE,ValueConformsToDataType,informativ
+E4,RelationalElement resolvbar,Characteristics,PHASE2_OCL_PENDING,RelationalElementResolvable,Phase-2-Binding pending
+E5,ValidityLimits konsistent,Characteristics,PHASE2_OCL_PENDING,ValidityLimitsConsistent,Phase-2-Binding pending
+E6,Boundary-State Characteristics,Characteristics,OPEN_PHASE2_OR_INFORMATIVE,BoundaryStateCharacteristicsShared,Phase 2
+F1,refObj auflösbar,References,PURE_OCL_LIVE,RefObjResolvable,
+F2,refProcess auflösbar,References,PURE_OCL_LIVE,RefProcessResolvable,
+F3,Alle Referenzen auflösbar,References,PURE_OCL_LIVE,AllReferencesResolvable,
+F4,Keine zirkuläre Dekomposition,References,OPEN_PHASE2_OR_INFORMATIVE,NoCircularDecomposition,Phase 2
+F5,Dekomposition erhält I/O,References,OPEN_PHASE2_OR_INFORMATIVE,DecompositionPreservesIO,Phase 2
+F6,Boundary-State-ID geteilt,References,OPEN_PHASE2_OR_INFORMATIVE,BoundaryStateIdShared,Mapper-Konvention
+F7,Dekompositions-Tiefenlimit,References,OPEN_PHASE2_OR_INFORMATIVE,DecompositionDepthLimit,informativ
+G1,PO hat I/O,Semantic,PURE_OCL_LIVE,ProcessOperatorHasIO,
+G2,State hat konkreten Typ,Semantic,PURE_OCL_LIVE,StateHasConcreteType,
+G3,Keine Selbstreferenz,Semantic,PURE_OCL_LIVE,NoSelfReference,
+G4,Keine verwaisten Elemente,Semantic,PURE_OCL_LIVE,NoOrphanedElements,
+G5,SubProcess nicht leer,Semantic,OPEN_PHASE2_OR_INFORMATIVE,SubProcessNotEmpty,Phase 2
+H1,Bounds vorhanden,Geometry,OPEN_PLUGIN_GEOMETRY,BoundsPresent,Plugin-Layer
+H2,Bounds positiv,Geometry,OPEN_PLUGIN_GEOMETRY,BoundsPositive,Plugin-Layer
+H3,Waypoints am Rand,Geometry,OPEN_PLUGIN_GEOMETRY,WaypointsAtBorder,Plugin-Layer
+H4,Waypoints geordnet,Geometry,OPEN_PLUGIN_GEOMETRY,WaypointsOrdered,Plugin-Layer
+H5,Positionen nicht-negativ,Geometry,OPEN_PLUGIN_GEOMETRY,PositionsNonNegative,Plugin-Layer
+I1,Allgemeine Strukturintegrität,CrossCut,OPEN_PHASE2_OR_INFORMATIVE,,Sammelposten
+I2,Project-weit unikale IDs,CrossCut,OPEN_PHASE2_OR_INFORMATIVE,ProjectWideUniqueIds,
+I3,Source+Target gleicher Prozess,CrossCut,PURE_OCL_LIVE,SourceTargetSameProcess,
+I4,Konsistenz Cross-IH,CrossCut,OPEN_PHASE2_OR_INFORMATIVE,,Phase 2: AML-Profil
+J1,RoleClassPath existiert,Schema,OPEN_MAPPER_SCHEMA,RoleClassPathExists,Mapper-Bibliothek
+J2,SystemUnitClassPath auflösbar,Schema,OPEN_MAPPER_SCHEMA,SystemUnitClassPathResolvable,Mapper-Bibliothek
+J3,AttributeDataType auflösbar,Schema,OPEN_MAPPER_SCHEMA,AttributeDataTypeResolvable,Mapper-Bibliothek
+J4,ExternalReference-Files existent,Schema,OPEN_MAPPER_SCHEMA,ExternalReferenceFilesExist,Out-of-scope für FPD-Profil
+
+# totals
+# OPEN_MAPPER_SCHEMA,4
+# OPEN_PHASE2_OR_INFORMATIVE,15
+# OPEN_PLUGIN_GEOMETRY,11
+# PHASE2_OCL_PENDING,4
+# PURE_OCL_LIVE,26
+# TOTAL_CATALOGUE,60

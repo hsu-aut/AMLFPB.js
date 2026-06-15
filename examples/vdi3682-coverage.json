@@ -1,0 +1,462 @@
+{
+  "schema": "amlfpbjs.vdi3682.coverage/v1",
+  "generated_at": "2026-06-15T00:00:00.0000000\u002B00:00",
+  "totals": {
+    "PURE_OCL_LIVE": 26,
+    "OPEN_PHASE2_OR_INFORMATIVE": 15,
+    "OPEN_PLUGIN_GEOMETRY": 11,
+    "PHASE2_OCL_PENDING": 4,
+    "OPEN_MAPPER_SCHEMA": 4,
+    "TOTAL_CATALOGUE": 60
+  },
+  "rules": [
+    {
+      "catalog_id": "A1",
+      "title": "Project-Process-Kardinalit\u00E4t",
+      "category": "Cardinality",
+      "ocl_constraint": "ProjectMinimumProcess",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "A2",
+      "title": "SystemLimit-Kardinalit\u00E4t",
+      "category": "Cardinality",
+      "ocl_constraint": "SystemLimitCardinality",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "A3",
+      "title": "State-Mindest-Kardinalit\u00E4t",
+      "category": "Cardinality",
+      "ocl_constraint": "StateMinimumCardinality",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "A4",
+      "title": "ProcessOperator-Mindest-Kard.",
+      "category": "Cardinality",
+      "ocl_constraint": "ProcessOperatorMinimumCardinality",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "A5",
+      "title": "TechnicalResource-Kardinalit\u00E4t",
+      "category": "Cardinality",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "informativ, keine Validierung"
+    },
+    {
+      "catalog_id": "B1",
+      "title": "State innerhalb SystemLimit",
+      "category": "Geometry",
+      "ocl_constraint": "StateWithinSystemLimit",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "B2",
+      "title": "PO innerhalb SystemLimit",
+      "category": "Geometry",
+      "ocl_constraint": "ProcessOperatorWithinSystemLimit",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "B3",
+      "title": "TR au\u00DFerhalb SystemLimit",
+      "category": "Geometry",
+      "ocl_constraint": "TechnicalResourceOutsideSystemLimit",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "B4",
+      "title": "SystemLimit umfasst Inhalt",
+      "category": "Geometry",
+      "ocl_constraint": "SystemLimitBoundingContainer",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "B5",
+      "title": "Keine \u00DCberlappung SL \u2194 TR",
+      "category": "Geometry",
+      "ocl_constraint": "SystemLimitTechnicalResourceNoOverlap",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "B6",
+      "title": "Boundary-State auf SL-Rand",
+      "category": "Geometry",
+      "ocl_constraint": "BoundaryStateOnSystemLimitBorder",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "C1",
+      "title": "Flow State\u2194PO",
+      "category": "Connection",
+      "ocl_constraint": "FlowEndpointsTyped",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "C2",
+      "title": "Kein Flow State\u2192State",
+      "category": "Connection",
+      "ocl_constraint": "NoStateToStateFlow",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "C3",
+      "title": "Kein Flow PO\u2192PO",
+      "category": "Connection",
+      "ocl_constraint": "NoProcessOperatorToProcessOperatorFlow",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "C4",
+      "title": "Usage PO\u2194TR",
+      "category": "Connection",
+      "ocl_constraint": "UsageEndpointsTyped",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "C5",
+      "title": "Keine doppelten Connections",
+      "category": "Connection",
+      "ocl_constraint": "NoDuplicateConnections",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "C6",
+      "title": "Flow ist directed",
+      "category": "Connection",
+      "ocl_constraint": "FlowDirected",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "C7",
+      "title": "Kanonische FPD-Interfaces",
+      "category": "Connection",
+      "ocl_constraint": "CanonicalFpdInterfaces",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "durch Mapper sichergestellt"
+    },
+    {
+      "catalog_id": "C8",
+      "title": "ParallelFlow-Konsistenz",
+      "category": "Connection",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Phase 2: requires-pair semantics"
+    },
+    {
+      "catalog_id": "C9",
+      "title": "Keine gemischten Flow-Typen",
+      "category": "Connection",
+      "ocl_constraint": "NoMixedFlowTypes",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "C10",
+      "title": "AlternativeFlow-Konsistenz",
+      "category": "Connection",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Phase 2: requires-pair semantics"
+    },
+    {
+      "catalog_id": "D1",
+      "title": "uniqueIdent-Unikalit\u00E4t",
+      "category": "Identity",
+      "ocl_constraint": "UniqueIdentifiers",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "D2",
+      "title": "IDs unikal in Hierarchie",
+      "category": "Identity",
+      "ocl_constraint": "UniqueIdsInHierarchy",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Phase 2: cross-IH scope"
+    },
+    {
+      "catalog_id": "D3",
+      "title": "PO benannt",
+      "category": "Identity",
+      "ocl_constraint": "ProcessOperatorNamed",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "D4",
+      "title": "State benannt",
+      "category": "Identity",
+      "ocl_constraint": "StateNamed",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "D5",
+      "title": "TR benannt",
+      "category": "Identity",
+      "ocl_constraint": "TechnicalResourceNamed",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "D6",
+      "title": "Process benannt",
+      "category": "Identity",
+      "ocl_constraint": "ProcessNamed",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "D7",
+      "title": "longName pflicht",
+      "category": "Identity",
+      "ocl_constraint": "LongNameMandatory",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "D8",
+      "title": "Version\u002BRevision vorhanden",
+      "category": "Identity",
+      "ocl_constraint": "VersionRevisionPresent",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "E1",
+      "title": "Characteristic.category vorh.",
+      "category": "Characteristics",
+      "ocl_constraint": "CharacteristicCategoryPresent",
+      "bucket": "PHASE2_OCL_PENDING",
+      "note": "Phase-2-Binding pending"
+    },
+    {
+      "catalog_id": "E2",
+      "title": "Characteristic.descriptive vorh.",
+      "category": "Characteristics",
+      "ocl_constraint": "CharacteristicDescriptivePresent",
+      "bucket": "PHASE2_OCL_PENDING",
+      "note": "Phase-2-Binding pending"
+    },
+    {
+      "catalog_id": "E3",
+      "title": "Value entspricht DataType",
+      "category": "Characteristics",
+      "ocl_constraint": "ValueConformsToDataType",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "informativ"
+    },
+    {
+      "catalog_id": "E4",
+      "title": "RelationalElement resolvbar",
+      "category": "Characteristics",
+      "ocl_constraint": "RelationalElementResolvable",
+      "bucket": "PHASE2_OCL_PENDING",
+      "note": "Phase-2-Binding pending"
+    },
+    {
+      "catalog_id": "E5",
+      "title": "ValidityLimits konsistent",
+      "category": "Characteristics",
+      "ocl_constraint": "ValidityLimitsConsistent",
+      "bucket": "PHASE2_OCL_PENDING",
+      "note": "Phase-2-Binding pending"
+    },
+    {
+      "catalog_id": "E6",
+      "title": "Boundary-State Characteristics",
+      "category": "Characteristics",
+      "ocl_constraint": "BoundaryStateCharacteristicsShared",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Phase 2"
+    },
+    {
+      "catalog_id": "F1",
+      "title": "refObj aufl\u00F6sbar",
+      "category": "References",
+      "ocl_constraint": "RefObjResolvable",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "F2",
+      "title": "refProcess aufl\u00F6sbar",
+      "category": "References",
+      "ocl_constraint": "RefProcessResolvable",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "F3",
+      "title": "Alle Referenzen aufl\u00F6sbar",
+      "category": "References",
+      "ocl_constraint": "AllReferencesResolvable",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "F4",
+      "title": "Keine zirkul\u00E4re Dekomposition",
+      "category": "References",
+      "ocl_constraint": "NoCircularDecomposition",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Phase 2"
+    },
+    {
+      "catalog_id": "F5",
+      "title": "Dekomposition erh\u00E4lt I/O",
+      "category": "References",
+      "ocl_constraint": "DecompositionPreservesIO",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Phase 2"
+    },
+    {
+      "catalog_id": "F6",
+      "title": "Boundary-State-ID geteilt",
+      "category": "References",
+      "ocl_constraint": "BoundaryStateIdShared",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Mapper-Konvention"
+    },
+    {
+      "catalog_id": "F7",
+      "title": "Dekompositions-Tiefenlimit",
+      "category": "References",
+      "ocl_constraint": "DecompositionDepthLimit",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "informativ"
+    },
+    {
+      "catalog_id": "G1",
+      "title": "PO hat I/O",
+      "category": "Semantic",
+      "ocl_constraint": "ProcessOperatorHasIO",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "G2",
+      "title": "State hat konkreten Typ",
+      "category": "Semantic",
+      "ocl_constraint": "StateHasConcreteType",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "G3",
+      "title": "Keine Selbstreferenz",
+      "category": "Semantic",
+      "ocl_constraint": "NoSelfReference",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "G4",
+      "title": "Keine verwaisten Elemente",
+      "category": "Semantic",
+      "ocl_constraint": "NoOrphanedElements",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "G5",
+      "title": "SubProcess nicht leer",
+      "category": "Semantic",
+      "ocl_constraint": "SubProcessNotEmpty",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Phase 2"
+    },
+    {
+      "catalog_id": "H1",
+      "title": "Bounds vorhanden",
+      "category": "Geometry",
+      "ocl_constraint": "BoundsPresent",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "H2",
+      "title": "Bounds positiv",
+      "category": "Geometry",
+      "ocl_constraint": "BoundsPositive",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "H3",
+      "title": "Waypoints am Rand",
+      "category": "Geometry",
+      "ocl_constraint": "WaypointsAtBorder",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "H4",
+      "title": "Waypoints geordnet",
+      "category": "Geometry",
+      "ocl_constraint": "WaypointsOrdered",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "H5",
+      "title": "Positionen nicht-negativ",
+      "category": "Geometry",
+      "ocl_constraint": "PositionsNonNegative",
+      "bucket": "OPEN_PLUGIN_GEOMETRY",
+      "note": "Plugin-Layer"
+    },
+    {
+      "catalog_id": "I1",
+      "title": "Allgemeine Strukturintegrit\u00E4t",
+      "category": "CrossCut",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Sammelposten"
+    },
+    {
+      "catalog_id": "I2",
+      "title": "Project-weit unikale IDs",
+      "category": "CrossCut",
+      "ocl_constraint": "ProjectWideUniqueIds",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE"
+    },
+    {
+      "catalog_id": "I3",
+      "title": "Source\u002BTarget gleicher Prozess",
+      "category": "CrossCut",
+      "ocl_constraint": "SourceTargetSameProcess",
+      "bucket": "PURE_OCL_LIVE"
+    },
+    {
+      "catalog_id": "I4",
+      "title": "Konsistenz Cross-IH",
+      "category": "CrossCut",
+      "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
+      "note": "Phase 2: AML-Profil"
+    },
+    {
+      "catalog_id": "J1",
+      "title": "RoleClassPath existiert",
+      "category": "Schema",
+      "ocl_constraint": "RoleClassPathExists",
+      "bucket": "OPEN_MAPPER_SCHEMA",
+      "note": "Mapper-Bibliothek"
+    },
+    {
+      "catalog_id": "J2",
+      "title": "SystemUnitClassPath aufl\u00F6sbar",
+      "category": "Schema",
+      "ocl_constraint": "SystemUnitClassPathResolvable",
+      "bucket": "OPEN_MAPPER_SCHEMA",
+      "note": "Mapper-Bibliothek"
+    },
+    {
+      "catalog_id": "J3",
+      "title": "AttributeDataType aufl\u00F6sbar",
+      "category": "Schema",
+      "ocl_constraint": "AttributeDataTypeResolvable",
+      "bucket": "OPEN_MAPPER_SCHEMA",
+      "note": "Mapper-Bibliothek"
+    },
+    {
+      "catalog_id": "J4",
+      "title": "ExternalReference-Files existent",
+      "category": "Schema",
+      "ocl_constraint": "ExternalReferenceFilesExist",
+      "bucket": "OPEN_MAPPER_SCHEMA",
+      "note": "Out-of-scope f\u00FCr FPD-Profil"
+    }
+  ]
+}
