@@ -54,6 +54,14 @@
                     <TextBlock Text="Export" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
+            <Button x:Name="ConformanceButton"
+                    Click="ConformanceButton_Click"
+                    ToolTip="Export Conformance Report — write a machine-readable VDI 3682 validation summary (JSON) for CI pipelines, audit logs, paper appendices.">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE9D5;" Foreground="#7050A0"/>
+                    <TextBlock Text="Conformance" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Button>
             <Separator/>
             <TextBlock x:Name="StatusLabel"
                        Text=""

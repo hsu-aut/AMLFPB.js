@@ -508,6 +508,43 @@ public partial class IhView : UserControl, IDisposable
         return string.IsNullOrWhiteSpace(clean) ? "InstanceHierarchy" : clean;
     }
 
+    // ── Conformance-Button: emit a machine-readable VDI 3682 report ───────
+    //
+    // The report runs against the *full* CAEX document (not just this IH) so
+    // CI uploads cover everything an AML file declares. The button itself
+    // lives on this tab because that's where the user is when they look at
+    // findings.
+    private void ConformanceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_doc == null) return;
+        try
+        {
+            var options = BuildValidationOptions(_settings);
+            var report = ConformanceReportBuilder.Build(_doc, DateTimeOffset.Now, options);
+
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var dialog = new SaveFileDialog
+            {
+                Filter = "Conformance Report (*.json)|*.json|All files (*.*)|*.*",
+                DefaultExt = ".json",
+                FileName = $"{SanitiseFileName(_ihLabel)}-conformance-{stamp}.json",
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            File.WriteAllText(dialog.FileName, report.ToJson(), System.Text.Encoding.UTF8);
+            PluginLog.Info($"[{_ihLabel}] Conformance report written to {dialog.FileName} " +
+                           $"(errors={report.Totals.Errors}, warnings={report.Totals.Warnings}, infos={report.Totals.Infos}, clean={report.Totals.Clean}).");
+            SetStatus($"Conformance report: {Path.GetFileName(dialog.FileName)} " +
+                      $"(E:{report.Totals.Errors} W:{report.Totals.Warnings} I:{report.Totals.Infos}).");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error($"[{_ihLabel}] Conformance export failed", ex);
+            MessageBox.Show($"Writing the conformance report failed:\n\n{ex.Message}",
+                "FPB.js Conformance Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     // ── JS → host messages ────────────────────────────────────────────────
     private void OnDiagramChangedFromJs(JsonElement payload)
     {
