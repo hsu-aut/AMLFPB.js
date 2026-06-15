@@ -33,4 +33,16 @@ public static class JsMessageType
     // Host → JS message types (envelope.type)
     public const string ImportJSON      = "importJSON";
     public const string SetTheme        = "setTheme";
+    public const string SelectElement   = "selectElement";
+}
+
+/// <summary>
+/// Payload posted from the host to ask the viewer to select an element and scroll
+/// it into view. <see cref="Id"/> is the element id as it appears in the FPB.JS
+/// model (the bare uniqueIdent for AML-sourced documents).
+/// </summary>
+public sealed record SelectElementMessage([property: JsonPropertyName("type")] string Type,
+                                          [property: JsonPropertyName("id")] string Id)
+{
+    public static SelectElementMessage For(string id) => new(JsMessageType.SelectElement, id);
 }

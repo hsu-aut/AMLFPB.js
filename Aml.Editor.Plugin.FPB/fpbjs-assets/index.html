@@ -285,6 +285,17 @@
           const t = (msg.theme === 'dark') ? 'dark' : 'light';
           document.documentElement.setAttribute('data-theme', t);
           try { localStorage.setItem('fpb-theme', t); } catch (_) { /* sandbox */ }
+        } else if (msg.type === 'selectElement') {
+          // Plugin-side UI (findings panel, AML tree, …) asks the viewer to
+          // jump to a specific element. We select + scroll so it lands in the
+          // current viewport even if the user has scrolled far away.
+          if (typeof fpb.select === 'function') {
+            const ok = fpb.select(msg.id, { scroll: true });
+            if (!ok) {
+              post({ type: 'log', level: 'info',
+                message: 'selectElement: id not found in current view: ' + msg.id });
+            }
+          }
         }
       } catch (err) {
         post({ type: 'error', message: 'handle ' + msg.type + ' failed: ' + err });
