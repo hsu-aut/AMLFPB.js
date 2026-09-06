@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <Version>0.6.19</Version>
+    <Version>0.6.20</Version>
     <Title>AMLFPB.js</Title>
     <Description>AutomationML Editor plugin for editing VDI 3682 Formalised Process Description (FPD) models. Embeds the FPB.js diagram canvas with live two-way sync between the diagram and the AML tree.</Description>
     <PackageTags>AMLEditor; AMLEditorPlugin.Net; AutomationML; FPB; VDI3682</PackageTags>
