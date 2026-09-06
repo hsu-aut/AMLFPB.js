@@ -14,19 +14,24 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
+      # Checkout layout mirrors the local dev tree, because the plugin uses
+      # <ProjectReference> + relative-path content references into its
+      # siblings:
+      #   <workspace>/AML/fpb-aml-editor-plugin   (this repo)
+      #   <workspace>/AML/fpb-aml-mapper          (..\..\fpb-aml-mapper)
+      #   <workspace>/OclNet                      (..\..\..\OclNet — pre-rename
+      #                                            directory name, repo is OCL.NET)
+      #   <workspace>/FPB.JS                      (..\..\..\FPB.JS\dist)
       - name: Checkout plugin
         uses: actions/checkout@v4
         with:
-          path: fpb-aml-editor-plugin
+          path: AML/fpb-aml-editor-plugin
 
-      # Sibling repos — these need to live next to the plugin on the runner
-      # because the plugin uses <ProjectReference> + relative-path content
-      # references into them.
       - name: Checkout mapper
         uses: actions/checkout@v4
         with:
           repository: hsu-aut/fpb-aml-mapper
-          path: fpb-aml-mapper
+          path: AML/fpb-aml-mapper
           # Mapper is public; no token needed. If it ever goes private:
           # token: ${{ secrets.GH_PAT }}
 
@@ -35,6 +40,12 @@ jobs:
         with:
           repository: hamiedNabizada/FPB.js
           path: FPB.JS
+
+      - name: Checkout OCL.NET
+        uses: actions/checkout@v4
+        with:
+          repository: HamiedNabizada/OCL.NET
+          path: OclNet
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -53,24 +64,23 @@ jobs:
           npm run build
 
       - name: Restore + build plugin
-        working-directory: fpb-aml-editor-plugin
-        # FpbJsDistDir is overridden because the csproj default
-        # (..\..\..\FPB.JS\dist) targets a local dev layout where FPB.JS lives
-        # one level above the AML/ subdirectory. On CI all three repos are
-        # checked out side-by-side under ${{ github.workspace }}.
+        working-directory: AML/fpb-aml-editor-plugin
+        # With the local-layout checkout above, the csproj defaults (including
+        # FpbJsDistDir = ..\..\..\FPB.JS\dist) resolve as-is; the explicit
+        # override just keeps the path visible in the log.
         run: |
           dotnet restore Aml.Editor.Plugin.FPB.sln
           dotnet build Aml.Editor.Plugin.FPB.sln -c Release --no-restore /p:FpbJsDistDir="${{ github.workspace }}\FPB.JS\dist"
 
       - name: Test
-        working-directory: fpb-aml-editor-plugin
+        working-directory: AML/fpb-aml-editor-plugin
         run: dotnet test Aml.Editor.Plugin.FPB.Tests/Aml.Editor.Plugin.FPB.Tests.csproj -c Release --no-build
 
       - name: Upload nupkg artifact
         uses: actions/upload-artifact@v4
         with:
           name: Aml.Editor.Plugin.FPB-nupkg
-          path: fpb-aml-editor-plugin/build/Plugins/Aml.Editor.Plugin.FPB/Release/*.nupkg
+          path: AML/fpb-aml-editor-plugin/build/Plugins/Aml.Editor.Plugin.FPB/Release/*.nupkg
 
       # On version tags (v0.5.0, v1.2.3, …) attach the produced nupkg as a
       # download asset on the corresponding GitHub Release. Release notes are
@@ -79,6 +89,6 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: fpb-aml-editor-plugin/build/Plugins/Aml.Editor.Plugin.FPB/Release/*.nupkg
+          files: AML/fpb-aml-editor-plugin/build/Plugins/Aml.Editor.Plugin.FPB/Release/*.nupkg
           generate_release_notes: true
           fail_on_unmatched_files: true
