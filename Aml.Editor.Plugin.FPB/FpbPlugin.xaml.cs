@@ -46,6 +46,15 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     /// </summary>
     private CAEXDocument? _lastFullyRebuilt;
 
+    // Monotonic rebuild token. RebuildTabsForDocumentInner awaits WebView2 init
+    // per IH, and those awaits let a second rebuild (a fast doc-switch, "+ New
+    // Process", or a DocumentUnLoaded) interleave on the UI thread. Without a
+    // generation check the stale rebuild's continuation resumes after the newer
+    // one already cleared the tab strip and adds ghost tabs bound to the wrong /
+    // closed document. Each rebuild claims the next token and bails as soon as it
+    // sees a newer one; DocumentUnLoaded bumps it to cancel an in-flight rebuild.
+    private int _rebuildGeneration;
+
     // Per-IH pending-snapshot cache, keyed by (OriginID, IH-bare-id) instead
     // of (CAEXDocument, IH-bare-id). The editor occasionally hot-swaps its
     // CAEXDocument wrapper around the same file (see IsAlreadyRebuilt's
@@ -54,8 +63,12 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     // never matched. OriginID survives the swap.
     private readonly Dictionary<(string originId, string ihId), string> _pendingCache = new();
 
+    // OriginID names the authoring TOOL (same GUID in every editor-saved file);
+    // suffix the document's own FileName so two showcase files never share a
+    // cache identity.
     private static string OriginIdOf(CAEXDocument? doc) =>
-        doc?.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID ?? "";
+        (doc?.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID ?? "")
+        + "|" + (doc?.CAEXFile?.FileName ?? "");
 
     public FpbPlugin()
     {
@@ -302,6 +315,9 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             foreach (var k in toRemove) _pendingCache.Remove(k);
         }
 
+        // Cancel any rebuild still awaiting WebView2 init: bump the token so its
+        // continuation bails instead of adding tabs for a now-closed document.
+        _rebuildGeneration++;
         DisposeAllIhViews();
         _currentDocument = null;
         _currentFilePath = null;
@@ -377,18 +393,34 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     {
         if (_lastFullyRebuilt == null) return false;
         if (ReferenceEquals(doc, _lastFullyRebuilt)) return true;
+        // OriginID identifies the AUTHORING TOOL, not the document — every file
+        // the AML editor ever saved carries the same GUID. Origin alone made a
+        // second showcase file look "already rebuilt": its tabs never rendered
+        // and Update wrote into the wrong document. Require the document's own
+        // FileName to match too.
         var docOrigin = doc.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID;
         var lastOrigin = _lastFullyRebuilt.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID;
-        return !string.IsNullOrEmpty(docOrigin) && string.Equals(docOrigin, lastOrigin, StringComparison.Ordinal);
+        if (string.IsNullOrEmpty(docOrigin) || !string.Equals(docOrigin, lastOrigin, StringComparison.Ordinal))
+            return false;
+        var docName = doc.CAEXFile?.FileName;
+        var lastName = _lastFullyRebuilt.CAEXFile?.FileName;
+        return !string.IsNullOrEmpty(docName)
+            && string.Equals(docName, lastName, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task RebuildTabsForDocumentInner(CAEXDocument doc)
     {
+        // Claim this rebuild's token AFTER the synchronous teardown below, so our
+        // own DisposeAllIhViews (which does not touch the token) never trips our
+        // own generation check. Any rebuild or DocumentUnLoaded that starts later
+        // bumps the token and makes this run bail at its next checkpoint.
         // Capture pending snapshots from the views we're about to tear down so
         // unsaved edits survive an undock/redock or doc-switch round trip.
         CapturePendingSnapshotsToCache();
 
         DisposeAllIhViews();
+
+        var myGen = ++_rebuildGeneration;
 
         var ihs = CaexToFpbJson.FindFpdInstanceHierarchies(doc).ToList();
         if (ihs.Count == 0)
@@ -402,6 +434,15 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
         int fallbackIndex = 1;
         foreach (var ih in ihs)
         {
+            // A newer rebuild (or a DocumentUnLoaded) superseded us while we were
+            // awaiting a previous IH's WebView2 init — stop before adding a tab
+            // that would belong to the wrong document.
+            if (myGen != _rebuildGeneration)
+            {
+                PluginLog.Debug($"Rebuild superseded (gen {myGen} < {_rebuildGeneration}) — aborting stale tab build.");
+                return;
+            }
+
             var label = !string.IsNullOrWhiteSpace(ih.Name) ? ih.Name : $"InstanceHierarchy {fallbackIndex++}";
 
             var view = new IhView();
@@ -423,6 +464,18 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             try
             {
                 await view.BindAsync(doc, ih, label, _settings);
+
+                // BindAsync awaited WebView2 init — re-check we weren't superseded
+                // while it ran. If so, dispose the view we just built (its browser
+                // process is live) and bail; DisposeAllIhViews already ran for the
+                // newer rebuild, so this orphan view is not in _orderedViews-of-record.
+                if (myGen != _rebuildGeneration)
+                {
+                    PluginLog.Debug($"Rebuild superseded (gen {myGen} < {_rebuildGeneration}) during BindAsync — discarding '{label}'.");
+                    try { view.Dispose(); } catch { /* best effort */ }
+                    return;
+                }
+
                 if (!string.IsNullOrEmpty(_activeTheme)) view.SendTheme(_activeTheme);
 
                 // Restore any cached pending snapshot for this (OriginID, IH) pair.
@@ -439,6 +492,7 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             }
         }
 
+        if (myGen != _rebuildGeneration) return;
         if (IhTabs.Items.Count > 0) IhTabs.SelectedIndex = 0;
         PluginLog.Info($"Document opened: {ihs.Count} FPD InstanceHierarchy(ies) → {ihs.Count} viewer tab(s).");
     }

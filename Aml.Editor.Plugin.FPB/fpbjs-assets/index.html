@@ -276,10 +276,27 @@
           // layout-settling 'changed' events (which fire asynchronously after import)
           // are still caught — otherwise the plugin sees them as fresh user edits
           // immediately after load.
-          requestAnimationFrame(() => requestAnimationFrame(() => {
+          //
+          // rAF is PAUSED by WebView2 while the tab content is hidden (a non-active
+          // sub-tab, or a collapsed plugin panel). An import that lands then would
+          // leave `importing` stuck true forever, silently swallowing every later
+          // user edit until the tab becomes visible again. The setTimeout is a
+          // fallback that still fires (throttled) when hidden; a guard makes sure
+          // only the first of the two paths resets and posts 'imported'.
+          let settled = false;
+          const settle = () => {
+            if (settled) return;
+            settled = true;
             importing = false;
-            post({ type: 'imported' });
-          }));
+            // Ship our OWN export of the just-imported model with the ack —
+            // the host stores it as the echo baseline: a later 'changed'
+            // payload equal to this is import fallout, anything else is a
+            // real user edit. Content-based, so no timed window can swallow
+            // genuine edits anymore.
+            post({ type: 'imported', data: safeSnapshot() });
+          };
+          requestAnimationFrame(() => requestAnimationFrame(settle));
+          setTimeout(settle, 1000);
         } else if (msg.type === 'setTheme') {
           // P11: editor theme follows here. Mirror what app/app.js does at boot.
           const t = (msg.theme === 'dark') ? 'dark' : 'light';

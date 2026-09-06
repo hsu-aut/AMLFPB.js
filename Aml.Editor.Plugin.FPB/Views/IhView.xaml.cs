@@ -33,6 +33,14 @@ public partial class IhView : UserControl, IDisposable
     private DateTime _pendingSnapshotTimestamp = DateTime.MinValue;
     private string _lastIhHash = string.Empty;
     private DateTime _lastImportFromHost = DateTime.MinValue;
+
+    /// <summary>
+    /// The viewer's own export of the model we last imported into it (shipped
+    /// with the JS 'imported' ack). 'changed' payloads equal to this are import
+    /// fallout; different payloads are genuine user edits. Null between a push
+    /// and its ack — the timed window covers that gap.
+    /// </summary>
+    private string? _echoBaseline;
     private bool _liveSyncSuppressed;
     private bool _disposed;
 
@@ -116,15 +124,15 @@ public partial class IhView : UserControl, IDisposable
                               "The diagram may be incomplete. Try Refresh from AML, or check the log file for details.");
         };
         _bridge.OnDiagramChanged += OnDiagramChangedFromJs;
-        _bridge.OnImported += () =>
+        _bridge.OnImported += baseline =>
         {
-            // Do NOT re-stamp _lastImportFromHost here. The pre-stamp in
-            // PushIhToWebView (line ~170) defines the start of the echo-
-            // suppression window. Re-stamping on a delayed ack (slow
-            // machines / WebView2 queue) would EXTEND that window past its
-            // intended 3-second duration and silently swallow a genuine user
-            // edit made just after the import landed.
-            PluginLog.Debug($"[{_ihLabel}] import acknowledged by JS (pre-stamp at PushIhToWebView remains the echo-window anchor).");
+            // Content-based echo detection (P0-8): the ack carries the viewer's
+            // own export of the just-imported model. Any later 'changed' payload
+            // equal to this baseline is import fallout; anything else is a REAL
+            // user edit — no timed window that could swallow genuine edits.
+            _echoBaseline = baseline;
+            PluginLog.Debug($"[{_ihLabel}] import acknowledged by JS " +
+                            (baseline != null ? "(echo baseline captured)." : "(no baseline payload — timed fallback stays active)."));
             HideJsErrorBanner();
         };
         _bridge.OnJsLog += (lvl, msg) => PluginLog.FromJs(lvl, $"[{_ihLabel}] {msg}");
@@ -180,8 +188,18 @@ public partial class IhView : UserControl, IDisposable
             // which a genuine user edit gets silently dropped. With the
             // stamp after, a failed push leaves the window closed; legit
             // edits land.
-            _bridge.ImportJson(result.Value);
-            _lastImportFromHost = DateTime.UtcNow;
+            // Only arm the echo-suppression window when the payload actually
+            // reached the live page. If ImportJson merely buffered it (bridge
+            // not ready yet), stamping here would open a fake window that
+            // swallows a genuine user edit made before the buffered push lands.
+            var posted = _bridge.ImportJson(result.Value);
+            if (posted)
+            {
+                _lastImportFromHost = DateTime.UtcNow;
+                // Invalidate the previous baseline until the new import is
+                // acknowledged — the timed window bridges that short gap.
+                _echoBaseline = null;
+            }
             foreach (var w in result.Warnings) PluginLog.Warn($"[{_ihLabel}] {w}");
 
             // After every successful push, check whether the IH was renamed in the
@@ -195,6 +213,11 @@ public partial class IhView : UserControl, IDisposable
                 try { LabelChanged?.Invoke(this, _ihLabel); }
                 catch (Exception ex) { PluginLog.Error("LabelChanged handler threw", ex); }
             }
+
+            // Validate on every push (initial load, Refresh, live-sync), not
+            // only after Update — otherwise the findings panel sits empty until
+            // the user first writes something back.
+            RunVdiValidationIfEnabled();
         }
         catch (Exception ex)
         {
@@ -215,30 +238,36 @@ public partial class IhView : UserControl, IDisposable
             return;
         }
 
-        // Safety check before mutating the document. If the diff looks suspicious
-        // (more adds/removes than the threshold), let the user opt out — protects
-        // against phantom-pending snapshots and similar accidents.
-        if (_settings.ConfirmLargeUpdates && !ConfirmLargeChangeIfNeeded(snapshot))
-            return;
-
-        // Stale-snapshot guard: if the pending edit lingered across a long
-        // modelling break (e.g. left the editor open over lunch), warn the
-        // user before applying it. Same rationale as ConfirmLargeUpdates —
-        // narrow the window where forgotten/stale state silently overwrites
-        // edits made elsewhere.
-        if (!ConfirmPendingAgeIfNeeded()) return;
-
-        // Disable the button + set a busy status so the user gets immediate
-        // feedback while UpdateInPlace runs (still synchronous on the UI thread
-        // because Aml.Engine is not thread-safe). Each phase is stopwatched and
-        // surfaced in the log so spikes become diagnosable.
-        if (UpdateButton != null) UpdateButton.IsEnabled = false;
-        SetStatus($"Updating '{_ihLabel}' …");
-        var swTotal = System.Diagnostics.Stopwatch.StartNew();
-
+        // Suppress live-sync for the ENTIRE operation, confirm dialogs included.
+        // MessageBox.Show pumps the dispatcher, so without this the poll timer
+        // could fire while a dialog is open, see an external tree change, and
+        // drop _pendingSnapshot — after which we'd apply our local `snapshot`
+        // copy and silently clobber that external edit. The finally block always
+        // clears the flag, including on the dialog-declined early returns.
+        _liveSyncSuppressed = true;
+        System.Diagnostics.Stopwatch? swTotal = null;
         try
         {
-            _liveSyncSuppressed = true;
+            // Safety check before mutating the document. If the diff looks suspicious
+            // (more adds/removes than the threshold), let the user opt out — protects
+            // against phantom-pending snapshots and similar accidents.
+            if (_settings.ConfirmLargeUpdates && !ConfirmLargeChangeIfNeeded(snapshot))
+                return;
+
+            // Stale-snapshot guard: if the pending edit lingered across a long
+            // modelling break (e.g. left the editor open over lunch), warn the
+            // user before applying it. Same rationale as ConfirmLargeUpdates —
+            // narrow the window where forgotten/stale state silently overwrites
+            // edits made elsewhere.
+            if (!ConfirmPendingAgeIfNeeded()) return;
+
+            // Disable the button + set a busy status so the user gets immediate
+            // feedback while UpdateInPlace runs (still synchronous on the UI thread
+            // because Aml.Engine is not thread-safe). Each phase is stopwatched and
+            // surfaced in the log so spikes become diagnosable.
+            if (UpdateButton != null) UpdateButton.IsEnabled = false;
+            SetStatus($"Updating '{_ihLabel}' …");
+            swTotal = System.Diagnostics.Stopwatch.StartNew();
 
             // Snapshot meta-info so we can correlate post-update behaviour with
             // what the viewer actually emitted. The hash is just a cheap finger-
@@ -264,8 +293,14 @@ public partial class IhView : UserControl, IDisposable
             if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-mapper — view disposed during operation."); return; }
 
             _pendingSnapshot = null;
-        _pendingSnapshotTimestamp = DateTime.MinValue;
+            _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
+            // Re-anchor the echo baseline on the state we just wrote into the
+            // document. Viewer == document == baseline now; a later undo back
+            // to the PRE-update state differs from this baseline and correctly
+            // becomes pending again. Leaving the old baseline in place would
+            // classify exactly that undo as import fallout — silent revert loss.
+            _echoBaseline = snapshot;
             foreach (var w in result.Warnings) PluginLog.Warn($"[{_ihLabel}] {w}");
 
             var swValidator = System.Diagnostics.Stopwatch.StartNew();
@@ -292,13 +327,13 @@ public partial class IhView : UserControl, IDisposable
             else
                 SetStatus("Updated. Press Ctrl+S to persist.");
 
-            swTotal.Stop();
+            swTotal?.Stop();
             PluginLog.Info($"[{_ihLabel}] Update timings — " +
                 $"mapper:{swMapper.ElapsedMilliseconds}ms " +
                 $"validator:{swValidator.ElapsedMilliseconds}ms " +
                 $"hash:{swHash.ElapsedMilliseconds}ms " +
                 $"save:{swSave.ElapsedMilliseconds}ms " +
-                $"total:{swTotal.ElapsedMilliseconds}ms");
+                $"total:{swTotal?.ElapsedMilliseconds ?? 0}ms");
 
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
@@ -550,10 +585,40 @@ public partial class IhView : UserControl, IDisposable
     {
         if (_disposed) return;
         if (payload.ValueKind == JsonValueKind.Undefined || payload.ValueKind == JsonValueKind.Null) return;
-        if (DateTime.UtcNow - _lastImportFromHost < EchoSuppressionWindow) return;
         if (_doc == null) return;
 
-        _pendingSnapshot = payload.GetRawText();
+        var raw = payload.GetRawText();
+        if (_echoBaseline != null)
+        {
+            // Content-based: identical to what the viewer exported right after
+            // OUR import ⇒ fallout, not a user edit. Different content is a
+            // real edit and is kept even seconds after an import.
+            if (string.Equals(raw, _echoBaseline, StringComparison.Ordinal))
+            {
+                // Viewer is back IN SYNC with the document (e.g. the user
+                // undid their edit). A stale pending snapshot from before the
+                // undo must not survive — Update would write the already-
+                // reverted edit into the AML.
+                if (_pendingSnapshot != null)
+                {
+                    PluginLog.Debug($"[{_ihLabel}] viewer returned to baseline — clearing stale pending snapshot.");
+                    _pendingSnapshot = null;
+                    _pendingSnapshotTimestamp = DateTime.MinValue;
+                    OnPendingStateChanged();
+                    Dispatcher.BeginInvoke(() =>
+                        System.Windows.Input.CommandManager.InvalidateRequerySuggested());
+                }
+                return;
+            }
+        }
+        else if (DateTime.UtcNow - _lastImportFromHost < EchoSuppressionWindow)
+        {
+            // Fallback for the gap before the ack lands (or stale JS assets
+            // without the baseline payload).
+            return;
+        }
+
+        _pendingSnapshot = raw;
         _pendingSnapshotTimestamp = DateTime.UtcNow;
         OnPendingStateChanged();
         Dispatcher.BeginInvoke(() =>
@@ -776,6 +841,14 @@ public partial class IhView : UserControl, IDisposable
         StopLiveSync();
         try { _bridge?.Dispose(); } catch { /* best effort */ }
         _bridge = null;
+        // _bridge.Dispose only detaches the CoreWebView2 event handlers; the
+        // WebView2 control itself (and its msedgewebview2 child process) lives
+        // on until finalisation. Over a long session every doc-switch / New
+        // Process / Import spawns a fresh IhView, so without an explicit dispose
+        // the browser processes accumulate and drag the editor down. The control
+        // is owned by XAML but has already been pulled from the visual tree by
+        // the time DisposeAllIhViews clears the tab items.
+        try { WebView?.Dispose(); } catch { /* best effort */ }
         _pendingSnapshot = null;
         _pendingSnapshotTimestamp = DateTime.MinValue;
         _doc = null;

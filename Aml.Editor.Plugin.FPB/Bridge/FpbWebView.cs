@@ -25,6 +25,8 @@ public sealed class FpbWebView : IDisposable
 
     private EventHandler<CoreWebView2WebMessageReceivedEventArgs>? _webMessageHandler;
     private EventHandler<CoreWebView2NavigationCompletedEventArgs>? _navigationHandler;
+    private EventHandler<CoreWebView2NavigationStartingEventArgs>? _navigationStartingHandler;
+    private EventHandler<CoreWebView2ProcessFailedEventArgs>? _processFailedHandler;
     private bool _disposed;
 
     public event Action? Ready;
@@ -96,9 +98,24 @@ public sealed class FpbWebView : IDisposable
                 ReportError($"Navigation failed: WebErrorStatus={ev.WebErrorStatus}");
             }
         };
+        // A fresh navigation (initial load, or a user-triggered reload via
+        // context menu / F5) tears down the JS-side message listener. Until the
+        // new page re-announces 'ready', any PostWebMessage would be dropped, so
+        // flip _ready off here and let ImportJson/SendTheme buffer instead.
+        _navigationStartingHandler = (_, __) => _ready = false;
+        // Without this, a WebView2 renderer-process crash leaves the tab blank
+        // with _ready still true — every subsequent push vanishes silently. Log
+        // it, drop out of the ready state so pushes buffer, and surface a banner.
+        _processFailedHandler = (_, ev) =>
+        {
+            _ready = false;
+            ReportError($"WebView2 process failed ({ev.ProcessFailedKind}). The viewer needs a Refresh from AML to recover.");
+        };
         if (_disposed) return;
         _view.CoreWebView2.WebMessageReceived += _webMessageHandler;
         _view.CoreWebView2.NavigationCompleted += _navigationHandler;
+        _view.CoreWebView2.NavigationStarting += _navigationStartingHandler;
+        _view.CoreWebView2.ProcessFailed += _processFailedHandler;
 
         _navStarted = true;
         _view.CoreWebView2.Navigate($"https://{VirtualHost}/index.html");
@@ -115,18 +132,24 @@ public sealed class FpbWebView : IDisposable
         return Path.Combine(pluginDir ?? AppContext.BaseDirectory, "fpbjs-assets");
     }
 
-    /// <summary>Push an FPB.JS JSON payload (raw text) into the modeler.</summary>
-    public void ImportJson(string json)
+    /// <summary>
+    /// Push an FPB.JS JSON payload (raw text) into the modeler. Returns true when
+    /// the payload was actually posted to the live page, false when it was only
+    /// buffered (bridge not ready) or rejected (invalid JSON / disposed). Callers
+    /// use the return value to decide whether to arm echo-suppression — a buffered
+    /// push must NOT open an echo window, because the real post happens later.
+    /// </summary>
+    public bool ImportJson(string json)
     {
-        if (string.IsNullOrEmpty(json)) return;
-        if (_disposed) return;
+        if (string.IsNullOrEmpty(json)) return false;
+        if (_disposed) return false;
 
         // P7: buffer until the JS side has really told us 'ready'. Until then any
         // PostWebMessage call would be silently dropped (no listeners attached yet).
         if (!_ready || _view.CoreWebView2 == null)
         {
             _pendingJson = json;
-            return;
+            return false;
         }
 
         string envelope;
@@ -142,9 +165,10 @@ public sealed class FpbWebView : IDisposable
         catch (JsonException ex)
         {
             ReportError("Cannot push JSON to FPB.JS — Mapper output is not valid JSON: " + ex.Message);
-            return;
+            return false;
         }
         _view.CoreWebView2.PostWebMessageAsJson(envelope);
+        return true;
     }
 
     /// <summary>
@@ -182,11 +206,13 @@ public sealed class FpbWebView : IDisposable
     }
 
     /// <summary>
-    /// Fired when JS posts an <c>imported</c> acknowledgement. The plugin uses this
-    /// to stamp its echo-suppression window: any <c>changed</c> event arriving in the
-    /// next short interval is the natural fallout of our own ImportJson, not a user edit.
+    /// Fired when JS posts an <c>imported</c> acknowledgement. The payload (when
+    /// present) is the viewer's OWN export snapshot of the just-imported model —
+    /// the host stores it as the echo baseline: any later <c>changed</c> payload
+    /// identical to it is import fallout, everything else is a real user edit.
+    /// Null when the JS asset predates the baseline handshake.
     /// </summary>
-    public event Action? OnImported;
+    public event Action<string?>? OnImported;
 
     // ─── Internal: handle JS → host messages ─────────────────────────────────────
     private void OnWebMessage(CoreWebView2WebMessageReceivedEventArgs e)
@@ -222,7 +248,14 @@ public sealed class FpbWebView : IDisposable
                 break;
 
             case JsMessageType.Imported:
-                OnImported?.Invoke();   // P0-2: drives host-side echo suppression
+                // P0-2/P0-8: the ack carries the viewer's own export snapshot —
+                // the host's content-based echo baseline. Older cached assets
+                // send no payload; pass null so the host can fall back.
+                var baseline = msg.Data.ValueKind == JsonValueKind.Undefined
+                            || msg.Data.ValueKind == JsonValueKind.Null
+                    ? null
+                    : msg.Data.GetRawText();
+                OnImported?.Invoke(baseline);
                 break;
 
             case JsMessageType.Log:
@@ -260,12 +293,16 @@ public sealed class FpbWebView : IDisposable
             {
                 if (_webMessageHandler != null) core.WebMessageReceived -= _webMessageHandler;
                 if (_navigationHandler != null) core.NavigationCompleted -= _navigationHandler;
+                if (_navigationStartingHandler != null) core.NavigationStarting -= _navigationStartingHandler;
+                if (_processFailedHandler != null) core.ProcessFailed -= _processFailedHandler;
             }
         }
         catch { /* CoreWebView2 may already be gone; nothing to do */ }
 
         _webMessageHandler = null;
         _navigationHandler = null;
+        _navigationStartingHandler = null;
+        _processFailedHandler = null;
         _ready = false;
         _navSucceeded = false;
         _pendingJson = null;
