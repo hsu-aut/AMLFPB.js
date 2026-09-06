@@ -38,7 +38,10 @@ public sealed class FindingRow
         {
             RuleId = f.RuleId,
             Message = f.Message,
-            ElementId = id,
+            // Brace-free: the double-click focus-jump feeds this to the FPB.js
+            // viewer, whose element ids never carry the CAEX {…} wrapper — a
+            // braced id made the jump miss silently for every mapper-built IE.
+            ElementId = StripBraces(id),
             ElementLabel = label,
             SeverityName = f.Severity.ToString(),
             SeverityGlyph = GlyphFor(f.Severity),

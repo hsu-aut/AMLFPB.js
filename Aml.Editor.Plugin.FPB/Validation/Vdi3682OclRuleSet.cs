@@ -44,8 +44,12 @@ public static class Vdi3682OclRuleSet
         ["StateNamed"] = Ocl.ValidationSeverity.Info,                              // D4
         ["TechnicalResourceNamed"] = Ocl.ValidationSeverity.Info,                  // D5
         ["ProcessNamed"] = Ocl.ValidationSeverity.Warning,                         // D6
-        ["LongNameMandatory"] = Ocl.ValidationSeverity.Error,                      // D7
-        ["VersionRevisionPresent"] = Ocl.ValidationSeverity.Warning,               // D8 (Blatt 2 Bild 4: Kardinalität 1)
+        // D7: Warning, nicht Error — die OCL-Regel hat jetzt einen Namens-Fallback,
+        // aber ein Element ganz ohne Namen soll die Demo nicht rot fluten.
+        ["LongNameMandatory"] = Ocl.ValidationSeverity.Warning,                    // D7
+        // D8: Info — FPB.js pflegt version/revision nicht; als Warning erzeugte das
+        // eine Dauer-Findings-Flut auf jedem einzelnen Element.
+        ["VersionRevisionPresent"] = Ocl.ValidationSeverity.Info,                  // D8 (Blatt 2 Bild 4: Kardinalität 1)
         ["RefObjResolvable"] = Ocl.ValidationSeverity.Error,                       // F1
         ["RefProcessResolvable"] = Ocl.ValidationSeverity.Error,                   // F2
         ["AllReferencesResolvable"] = Ocl.ValidationSeverity.Error,                // F3
