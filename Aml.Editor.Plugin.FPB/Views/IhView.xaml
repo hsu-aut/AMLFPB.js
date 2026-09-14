@@ -46,21 +46,36 @@
                 </StackPanel>
             </Button>
             <Separator/>
-            <Button x:Name="ExportButton"
-                    Click="ExportButton_Click"
-                    ToolTip="Export JSON — save this InstanceHierarchy's FPD content as an FPB.js JSON file.">
+            <!-- What a session needs every time stays a button of its own.
+                 Creating, importing and exporting happen now and then, so they
+                 share one menu, and the toolbar does not grow with every command
+                 added later. New Process and Import are also on the editor
+                 toolbar, but the editor shows the toolbar of one plugin at a
+                 time, and with AMLPetriNet loaded that may not be this one. -->
+            <Button x:Name="ProcessMenuButton"
+                    Click="ProcessMenuButton_Click"
+                    ToolTip="Create, import or export an FPD process.">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE78C;" Foreground="#608060"/>
-                    <TextBlock Text="Export" VerticalAlignment="Center"/>
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE700;" Foreground="#606060"/>
+                    <TextBlock Text="Process &#x25BE;" VerticalAlignment="Center"/>
                 </StackPanel>
-            </Button>
-            <Button x:Name="ConformanceButton"
-                    Click="ConformanceButton_Click"
-                    ToolTip="Export Conformance Report — write a machine-readable VDI 3682 validation summary (JSON) for CI pipelines, audit logs, paper appendices.">
-                <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE9D5;" Foreground="#7050A0"/>
-                    <TextBlock Text="Conformance" VerticalAlignment="Center"/>
-                </StackPanel>
+                <Button.ContextMenu>
+                    <ContextMenu x:Name="ProcessMenu">
+                        <MenuItem x:Name="NewProcessItem"
+                                  Header="New Process"
+                                  ToolTip="Create an empty FPD InstanceHierarchy in the current AML document."/>
+                        <MenuItem x:Name="ImportItem"
+                                  Header="Import FPB.js JSON..."
+                                  ToolTip="Load an FPB.js JSON file and add its FPD content as a new InstanceHierarchy."/>
+                        <Separator/>
+                        <MenuItem Header="Export JSON..."
+                                  ToolTip="Save this InstanceHierarchy's FPD content as an FPB.js JSON file."
+                                  Click="ExportButton_Click"/>
+                        <MenuItem Header="Export Conformance Report..."
+                                  ToolTip="Write a machine-readable VDI 3682 validation summary (JSON) for CI pipelines, audit logs and paper appendices."
+                                  Click="ConformanceButton_Click"/>
+                    </ContextMenu>
+                </Button.ContextMenu>
             </Button>
             <Separator/>
             <TextBlock x:Name="StatusLabel"

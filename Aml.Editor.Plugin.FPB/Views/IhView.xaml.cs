@@ -95,6 +95,26 @@ public partial class IhView : UserControl, IDisposable
     }
 
     /// <summary>
+    /// Hands the view the plugin's document-level commands for its Process menu.
+    /// The plugin owns them, since they add an InstanceHierarchy rather than act
+    /// on this one; running the same command objects keeps enabling and disabling
+    /// in step with the editor toolbar.
+    /// </summary>
+    public void UseDocumentCommands(System.Windows.Input.ICommand newProcess, System.Windows.Input.ICommand import)
+    {
+        NewProcessItem.Command = newProcess;
+        ImportItem.Command = import;
+    }
+
+    /// <summary>Opens the Process menu under its button, the way a drop-down button does.</summary>
+    private void ProcessMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        ProcessMenu.PlacementTarget = ProcessMenuButton;
+        ProcessMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        ProcessMenu.IsOpen = true;
+    }
+
+    /// <summary>
     /// Bind this view to a specific InstanceHierarchy in <paramref name="doc"/> and
     /// fire the WebView2 init + initial document push.
     /// </summary>

@@ -144,6 +144,11 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             },
         };
 
+        // The empty state offers the two ways out of it, so they do not depend on
+        // the editor showing this plugin's toolbar.
+        PlaceholderNewProcessButton.Command = ToolBarCommands[0].Command;
+        PlaceholderImportButton.Command = ToolBarCommands[1].Command;
+
         Loaded += (_, __) =>
         {
             if (LogFilePathLabel != null)
@@ -446,6 +451,7 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             var label = !string.IsNullOrWhiteSpace(ih.Name) ? ih.Name : $"InstanceHierarchy {fallbackIndex++}";
 
             var view = new IhView();
+            view.UseDocumentCommands(ToolBarCommands[0].Command, ToolBarCommands[1].Command);
             var tab = new TabItem
             {
                 Header = label,
