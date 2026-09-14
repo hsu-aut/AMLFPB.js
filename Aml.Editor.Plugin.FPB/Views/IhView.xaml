@@ -49,9 +49,9 @@
             <!-- What a session needs every time stays a button of its own.
                  Creating, importing and exporting happen now and then, so they
                  share one menu, and the toolbar does not grow with every command
-                 added later. New Process and Import are also on the editor
-                 toolbar, but the editor shows the toolbar of one plugin at a
-                 time, and with AMLPetriNet loaded that may not be this one. -->
+                 added later. They are deliberately not on the editor toolbar:
+                 it shows the commands of one plugin at a time, which put the
+                 Petri net commands into this tab or doubled these. -->
             <Button x:Name="ProcessMenuButton"
                     Click="ProcessMenuButton_Click"
                     ToolTip="Create, import or export an FPD process.">

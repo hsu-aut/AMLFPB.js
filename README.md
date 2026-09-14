@@ -29,12 +29,12 @@ This is research-quality software. APIs are not yet stable.
 
 ## Usage
 
-After installation, open any AML document with FPD content, or use **+ New Process** in the editor toolbar to start an empty one.
+After installation, open any AML document with FPD content, or use **New Process** in the plugin's empty tab to start one. Once a process is open, the same command is in each tab's **Process** menu.
 
 ### Editing flow
 
-- Changes in the FPB.js viewer are buffered until you click **Update InstanceHierarchy** in the tab's toolbar. That writes the buffered changes into the CAEX document. `Ctrl+S` then persists them to disk.
-- Changes in the AML tree are picked up by the viewer automatically after a few seconds. **Refresh from AML** forces an immediate refresh.
+- Changes in the FPB.js viewer are buffered until you click **Update** in the tab's toolbar. That writes the buffered changes into the CAEX document. `Ctrl+S` then persists them to disk.
+- Changes in the AML tree are picked up by the viewer automatically after a few seconds. **Refresh** forces an immediate refresh.
 
 ### Decomposition
 
@@ -42,9 +42,14 @@ Right-click a process operator and choose **Decompose**. The plugin creates a su
 
 ### New processes and JSON exchange
 
-- **+ New Process** (editor toolbar) — creates an empty FPD InstanceHierarchy.
-- **Import FPB.js** (editor toolbar) — adds a new IH from a `.json` file produced by [fpbjs.net](https://www.fpbjs.net) or any other FPB.js-based application.
-- **Export JSON** (per IH tab) — writes the current IH content to a `.json` file.
+All in the **Process** menu of each tab; New Process and Import also in the empty tab while the document has no FPD content:
+
+- **New Process** creates an empty FPD InstanceHierarchy.
+- **Import FPB.js JSON** adds a new IH from a `.json` file produced by [fpbjs.net](https://www.fpbjs.net) or any other FPB.js-based application.
+- **Export JSON** writes the current IH content to a `.json` file.
+- **Export Conformance Report** writes a machine-readable VDI 3682 validation summary.
+
+The editor toolbar carries no commands of this plugin: the editor shows the toolbar of one plugin at a time, so with other plugins loaded they would appear in the wrong tab.
 
 ## Architecture
 

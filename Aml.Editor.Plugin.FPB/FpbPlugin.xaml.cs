@@ -19,7 +19,7 @@ using Microsoft.Win32;
 
 namespace Aml.Editor.Plugin.FPB;
 
-public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsThemes, INotifyAMLDocumentLoad
+public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocumentLoad
 {
     private CAEXDocument? _currentDocument;
     private string? _currentFilePath;
@@ -121,33 +121,15 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             PluginLog.Error("OCL EnsureCompiled threw at startup", ex);
         }
 
-        ToolBarCommands = new List<PluginCommand>
-        {
-            // Toolbar contains the two cross-IH actions — actions that produce a
-            // brand new IH (i.e. a new sub-tab inside the viewer). Per-IH Update /
-            // Refresh / Export live in each viewer sub-tab.
-            new PluginCommand
-            {
-                CommandName = "New Process",
-                CommandButtonContent = new TextBlock { Text = "+ New Process", Margin = new Thickness(4, 0, 4, 0) },
-                Command = new RelayCommand<object>(p => ExecuteNewProcess(p), p => CanExecuteNewProcess(p)),
-                CommandToolTip = "Create an empty FPD InstanceHierarchy in the current AML document (one process, one SystemLimit). Use the FPB.js palette to model.",
-                IsCheckable = false,
-            },
-            new PluginCommand
-            {
-                CommandName = "Import FPB.js",
-                CommandButtonContent = new TextBlock { Text = "Import FPB.js", Margin = new Thickness(4, 0, 4, 0) },
-                Command = new RelayCommand<object>(p => ExecuteImport(p), p => CanExecuteImport(p)),
-                CommandToolTip = "Load an FPB.js JSON file and add its FPD content as a new InstanceHierarchy.",
-                IsCheckable = false,
-            },
-        };
-
-        // The empty state offers the two ways out of it, so they do not depend on
-        // the editor showing this plugin's toolbar.
-        PlaceholderNewProcessButton.Command = ToolBarCommands[0].Command;
-        PlaceholderImportButton.Command = ToolBarCommands[1].Command;
+        // New Process and Import FPB.js are not on the editor toolbar. It shows the
+        // commands of one plugin at a time, so with AMLPetriNet loaded it put the
+        // Petri net commands into this tab, and otherwise the commands appeared
+        // twice. They live in each viewer's Process menu and, while there is no
+        // FPD hierarchy yet, in the empty placeholder.
+        _newProcessCommand = new RelayCommand<object>(p => ExecuteNewProcess(p), p => CanExecuteNewProcess(p));
+        _importCommand = new RelayCommand<object>(p => ExecuteImport(p), p => CanExecuteImport(p));
+        PlaceholderNewProcessButton.Command = _newProcessCommand;
+        PlaceholderImportButton.Command = _importCommand;
 
         Loaded += (_, __) =>
         {
@@ -204,7 +186,10 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     public override DockPositionEnum InitialDockPosition => DockPositionEnum.DockContent;
     public override bool CanClose => true;
 
-    public List<PluginCommand> ToolBarCommands { get; }
+    // New Process and Import FPB.js, shared by every viewer's Process menu and the
+    // empty placeholder, so enabling follows the document everywhere at once.
+    private readonly System.Windows.Input.ICommand _newProcessCommand;
+    private readonly System.Windows.Input.ICommand _importCommand;
 
     // ── Editor callbacks ────────────────────────────────────────────────
 
@@ -451,7 +436,7 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             var label = !string.IsNullOrWhiteSpace(ih.Name) ? ih.Name : $"InstanceHierarchy {fallbackIndex++}";
 
             var view = new IhView();
-            view.UseDocumentCommands(ToolBarCommands[0].Command, ToolBarCommands[1].Command);
+            view.UseDocumentCommands(_newProcessCommand, _importCommand);
             var tab = new TabItem
             {
                 Header = label,
