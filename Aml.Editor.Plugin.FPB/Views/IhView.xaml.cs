@@ -4,10 +4,12 @@
 // Lifecycle is owned by FpbPlugin which creates an IhView per FPD-bearing IH
 // on DocumentLoaded and disposes them on DocumentUnLoaded.
 
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Aml.Editor.Plugin.FPB.Bridge;
 using Aml.Editor.Plugin.FPB.Diagnostics;
@@ -31,6 +33,14 @@ public partial class IhView : UserControl, IDisposable
     private DateTime _pendingSnapshotTimestamp = DateTime.MinValue;
     private string _lastIhHash = string.Empty;
     private DateTime _lastImportFromHost = DateTime.MinValue;
+
+    /// <summary>
+    /// The viewer's own export of the model we last imported into it (shipped
+    /// with the JS 'imported' ack). 'changed' payloads equal to this are import
+    /// fallout; different payloads are genuine user edits. Null between a push
+    /// and its ack — the timed window covers that gap.
+    /// </summary>
+    private string? _echoBaseline;
     private bool _liveSyncSuppressed;
     private bool _disposed;
 
@@ -75,9 +85,33 @@ public partial class IhView : UserControl, IDisposable
         SetStatus("Restored pending edits from before the document switch — click Update InstanceHierarchy to apply, Refresh from AML to discard.");
     }
 
+    /// <summary>VDI 3682 findings shown in the bottom DataGrid. Refreshed at every Update / Refresh cycle.</summary>
+    private readonly ObservableCollection<FindingRow> _findings = new();
+
     public IhView()
     {
         InitializeComponent();
+        FindingsGrid.ItemsSource = _findings;
+    }
+
+    /// <summary>
+    /// Hands the view the plugin's document-level commands for its Process menu.
+    /// The plugin owns them, since they add an InstanceHierarchy rather than act
+    /// on this one; running the same command objects keeps enabling and disabling
+    /// in step with the editor toolbar.
+    /// </summary>
+    public void UseDocumentCommands(System.Windows.Input.ICommand newProcess, System.Windows.Input.ICommand import)
+    {
+        NewProcessItem.Command = newProcess;
+        ImportItem.Command = import;
+    }
+
+    /// <summary>Opens the Process menu under its button, the way a drop-down button does.</summary>
+    private void ProcessMenuButton_Click(object sender, RoutedEventArgs e)
+    {
+        ProcessMenu.PlacementTarget = ProcessMenuButton;
+        ProcessMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        ProcessMenu.IsOpen = true;
     }
 
     /// <summary>
@@ -110,15 +144,15 @@ public partial class IhView : UserControl, IDisposable
                               "The diagram may be incomplete. Try Refresh from AML, or check the log file for details.");
         };
         _bridge.OnDiagramChanged += OnDiagramChangedFromJs;
-        _bridge.OnImported += () =>
+        _bridge.OnImported += baseline =>
         {
-            // Do NOT re-stamp _lastImportFromHost here. The pre-stamp in
-            // PushIhToWebView (line ~170) defines the start of the echo-
-            // suppression window. Re-stamping on a delayed ack (slow
-            // machines / WebView2 queue) would EXTEND that window past its
-            // intended 3-second duration and silently swallow a genuine user
-            // edit made just after the import landed.
-            PluginLog.Debug($"[{_ihLabel}] import acknowledged by JS (pre-stamp at PushIhToWebView remains the echo-window anchor).");
+            // Content-based echo detection (P0-8): the ack carries the viewer's
+            // own export of the just-imported model. Any later 'changed' payload
+            // equal to this baseline is import fallout; anything else is a REAL
+            // user edit — no timed window that could swallow genuine edits.
+            _echoBaseline = baseline;
+            PluginLog.Debug($"[{_ihLabel}] import acknowledged by JS " +
+                            (baseline != null ? "(echo baseline captured)." : "(no baseline payload — timed fallback stays active)."));
             HideJsErrorBanner();
         };
         _bridge.OnJsLog += (lvl, msg) => PluginLog.FromJs(lvl, $"[{_ihLabel}] {msg}");
@@ -174,8 +208,18 @@ public partial class IhView : UserControl, IDisposable
             // which a genuine user edit gets silently dropped. With the
             // stamp after, a failed push leaves the window closed; legit
             // edits land.
-            _bridge.ImportJson(result.Value);
-            _lastImportFromHost = DateTime.UtcNow;
+            // Only arm the echo-suppression window when the payload actually
+            // reached the live page. If ImportJson merely buffered it (bridge
+            // not ready yet), stamping here would open a fake window that
+            // swallows a genuine user edit made before the buffered push lands.
+            var posted = _bridge.ImportJson(result.Value);
+            if (posted)
+            {
+                _lastImportFromHost = DateTime.UtcNow;
+                // Invalidate the previous baseline until the new import is
+                // acknowledged — the timed window bridges that short gap.
+                _echoBaseline = null;
+            }
             foreach (var w in result.Warnings) PluginLog.Warn($"[{_ihLabel}] {w}");
 
             // After every successful push, check whether the IH was renamed in the
@@ -189,6 +233,11 @@ public partial class IhView : UserControl, IDisposable
                 try { LabelChanged?.Invoke(this, _ihLabel); }
                 catch (Exception ex) { PluginLog.Error("LabelChanged handler threw", ex); }
             }
+
+            // Validate on every push (initial load, Refresh, live-sync), not
+            // only after Update — otherwise the findings panel sits empty until
+            // the user first writes something back.
+            RunVdiValidationIfEnabled();
         }
         catch (Exception ex)
         {
@@ -209,30 +258,36 @@ public partial class IhView : UserControl, IDisposable
             return;
         }
 
-        // Safety check before mutating the document. If the diff looks suspicious
-        // (more adds/removes than the threshold), let the user opt out — protects
-        // against phantom-pending snapshots and similar accidents.
-        if (_settings.ConfirmLargeUpdates && !ConfirmLargeChangeIfNeeded(snapshot))
-            return;
-
-        // Stale-snapshot guard: if the pending edit lingered across a long
-        // modelling break (e.g. left the editor open over lunch), warn the
-        // user before applying it. Same rationale as ConfirmLargeUpdates —
-        // narrow the window where forgotten/stale state silently overwrites
-        // edits made elsewhere.
-        if (!ConfirmPendingAgeIfNeeded()) return;
-
-        // Disable the button + set a busy status so the user gets immediate
-        // feedback while UpdateInPlace runs (still synchronous on the UI thread
-        // because Aml.Engine is not thread-safe). Each phase is stopwatched and
-        // surfaced in the log so spikes become diagnosable.
-        if (UpdateButton != null) UpdateButton.IsEnabled = false;
-        SetStatus($"Updating '{_ihLabel}' …");
-        var swTotal = System.Diagnostics.Stopwatch.StartNew();
-
+        // Suppress live-sync for the ENTIRE operation, confirm dialogs included.
+        // MessageBox.Show pumps the dispatcher, so without this the poll timer
+        // could fire while a dialog is open, see an external tree change, and
+        // drop _pendingSnapshot — after which we'd apply our local `snapshot`
+        // copy and silently clobber that external edit. The finally block always
+        // clears the flag, including on the dialog-declined early returns.
+        _liveSyncSuppressed = true;
+        System.Diagnostics.Stopwatch? swTotal = null;
         try
         {
-            _liveSyncSuppressed = true;
+            // Safety check before mutating the document. If the diff looks suspicious
+            // (more adds/removes than the threshold), let the user opt out — protects
+            // against phantom-pending snapshots and similar accidents.
+            if (_settings.ConfirmLargeUpdates && !ConfirmLargeChangeIfNeeded(snapshot))
+                return;
+
+            // Stale-snapshot guard: if the pending edit lingered across a long
+            // modelling break (e.g. left the editor open over lunch), warn the
+            // user before applying it. Same rationale as ConfirmLargeUpdates —
+            // narrow the window where forgotten/stale state silently overwrites
+            // edits made elsewhere.
+            if (!ConfirmPendingAgeIfNeeded()) return;
+
+            // Disable the button + set a busy status so the user gets immediate
+            // feedback while UpdateInPlace runs (still synchronous on the UI thread
+            // because Aml.Engine is not thread-safe). Each phase is stopwatched and
+            // surfaced in the log so spikes become diagnosable.
+            if (UpdateButton != null) UpdateButton.IsEnabled = false;
+            SetStatus($"Updating '{_ihLabel}' …");
+            swTotal = System.Diagnostics.Stopwatch.StartNew();
 
             // Snapshot meta-info so we can correlate post-update behaviour with
             // what the viewer actually emitted. The hash is just a cheap finger-
@@ -258,8 +313,14 @@ public partial class IhView : UserControl, IDisposable
             if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-mapper — view disposed during operation."); return; }
 
             _pendingSnapshot = null;
-        _pendingSnapshotTimestamp = DateTime.MinValue;
+            _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
+            // Re-anchor the echo baseline on the state we just wrote into the
+            // document. Viewer == document == baseline now; a later undo back
+            // to the PRE-update state differs from this baseline and correctly
+            // becomes pending again. Leaving the old baseline in place would
+            // classify exactly that undo as import fallout — silent revert loss.
+            _echoBaseline = snapshot;
             foreach (var w in result.Warnings) PluginLog.Warn($"[{_ihLabel}] {w}");
 
             var swValidator = System.Diagnostics.Stopwatch.StartNew();
@@ -286,13 +347,13 @@ public partial class IhView : UserControl, IDisposable
             else
                 SetStatus("Updated. Press Ctrl+S to persist.");
 
-            swTotal.Stop();
+            swTotal?.Stop();
             PluginLog.Info($"[{_ihLabel}] Update timings — " +
                 $"mapper:{swMapper.ElapsedMilliseconds}ms " +
                 $"validator:{swValidator.ElapsedMilliseconds}ms " +
                 $"hash:{swHash.ElapsedMilliseconds}ms " +
                 $"save:{swSave.ElapsedMilliseconds}ms " +
-                $"total:{swTotal.ElapsedMilliseconds}ms");
+                $"total:{swTotal?.ElapsedMilliseconds ?? 0}ms");
 
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
         }
@@ -502,15 +563,82 @@ public partial class IhView : UserControl, IDisposable
         return string.IsNullOrWhiteSpace(clean) ? "InstanceHierarchy" : clean;
     }
 
+    // ── Conformance-Button: emit a machine-readable VDI 3682 report ───────
+    //
+    // The report runs against the *full* CAEX document (not just this IH) so
+    // CI uploads cover everything an AML file declares. The button itself
+    // lives on this tab because that's where the user is when they look at
+    // findings.
+    private void ConformanceButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_doc == null) return;
+        try
+        {
+            var options = BuildValidationOptions(_settings);
+            var report = ConformanceReportBuilder.Build(_doc, DateTimeOffset.Now, options);
+
+            var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
+            var dialog = new SaveFileDialog
+            {
+                Filter = "Conformance Report (*.json)|*.json|All files (*.*)|*.*",
+                DefaultExt = ".json",
+                FileName = $"{SanitiseFileName(_ihLabel)}-conformance-{stamp}.json",
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            File.WriteAllText(dialog.FileName, report.ToJson(), System.Text.Encoding.UTF8);
+            PluginLog.Info($"[{_ihLabel}] Conformance report written to {dialog.FileName} " +
+                           $"(errors={report.Totals.Errors}, warnings={report.Totals.Warnings}, infos={report.Totals.Infos}, clean={report.Totals.Clean}).");
+            SetStatus($"Conformance report: {Path.GetFileName(dialog.FileName)} " +
+                      $"(E:{report.Totals.Errors} W:{report.Totals.Warnings} I:{report.Totals.Infos}).");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error($"[{_ihLabel}] Conformance export failed", ex);
+            MessageBox.Show($"Writing the conformance report failed:\n\n{ex.Message}",
+                "FPB.js Conformance Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     // ── JS → host messages ────────────────────────────────────────────────
     private void OnDiagramChangedFromJs(JsonElement payload)
     {
         if (_disposed) return;
         if (payload.ValueKind == JsonValueKind.Undefined || payload.ValueKind == JsonValueKind.Null) return;
-        if (DateTime.UtcNow - _lastImportFromHost < EchoSuppressionWindow) return;
         if (_doc == null) return;
 
-        _pendingSnapshot = payload.GetRawText();
+        var raw = payload.GetRawText();
+        if (_echoBaseline != null)
+        {
+            // Content-based: identical to what the viewer exported right after
+            // OUR import ⇒ fallout, not a user edit. Different content is a
+            // real edit and is kept even seconds after an import.
+            if (string.Equals(raw, _echoBaseline, StringComparison.Ordinal))
+            {
+                // Viewer is back IN SYNC with the document (e.g. the user
+                // undid their edit). A stale pending snapshot from before the
+                // undo must not survive — Update would write the already-
+                // reverted edit into the AML.
+                if (_pendingSnapshot != null)
+                {
+                    PluginLog.Debug($"[{_ihLabel}] viewer returned to baseline — clearing stale pending snapshot.");
+                    _pendingSnapshot = null;
+                    _pendingSnapshotTimestamp = DateTime.MinValue;
+                    OnPendingStateChanged();
+                    Dispatcher.BeginInvoke(() =>
+                        System.Windows.Input.CommandManager.InvalidateRequerySuggested());
+                }
+                return;
+            }
+        }
+        else if (DateTime.UtcNow - _lastImportFromHost < EchoSuppressionWindow)
+        {
+            // Fallback for the gap before the ack lands (or stale JS assets
+            // without the baseline payload).
+            return;
+        }
+
+        _pendingSnapshot = raw;
         _pendingSnapshotTimestamp = DateTime.UtcNow;
         OnPendingStateChanged();
         Dispatcher.BeginInvoke(() =>
@@ -556,11 +684,19 @@ public partial class IhView : UserControl, IDisposable
 
             // Conflict: user has unsynced FPB.js edits AND the AML tree changed.
             // Drop pending and warn so we don't later silently overwrite the tree.
+            // Before dropping, dump the snapshot to a TEMP backup so the user has
+            // a recovery path if the discarded edits were valuable.
             if (!string.IsNullOrEmpty(_pendingSnapshot))
             {
-                PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while FPB.js had unsynced edits — pending viewer edits dropped. " +
-                               $"hash-before={hashBefore:X8} hash-now={hash:X8} pending-bytes={_pendingSnapshot.Length}");
-                SetStatus("Tree changed externally — pending viewer edits dropped.");
+                var backupPath = TryWritePendingBackup(_pendingSnapshot);
+                var locationHint = backupPath is null
+                    ? string.Empty
+                    : $" Backup written to {backupPath}.";
+
+                PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while FPB.js had unsynced edits — pending viewer edits dropped." +
+                               locationHint +
+                               $" hash-before={hashBefore:X8} hash-now={hash:X8} pending-bytes={_pendingSnapshot.Length}");
+                SetStatus("Tree changed externally — pending viewer edits dropped." + locationHint);
                 _pendingSnapshot = null;
                 _pendingSnapshotTimestamp = DateTime.MinValue;
                 OnPendingStateChanged();
@@ -576,6 +712,30 @@ public partial class IhView : UserControl, IDisposable
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] live-sync tick failed", ex);
+        }
+    }
+
+    /// <summary>
+    /// Persist a pending FPB.js snapshot to <c>%TEMP%\fpb-plugin\pending-backup\</c>
+    /// when live-sync is about to discard it because the AML tree changed
+    /// externally. Returns the backup file path on success, null on failure
+    /// (the calling path stays running either way — recovery is best-effort).
+    /// </summary>
+    private string? TryWritePendingBackup(string snapshotJson)
+    {
+        try
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "fpb-plugin", "pending-backup");
+            Directory.CreateDirectory(dir);
+            var fileName = $"pending-{SanitiseFileName(_ihLabel)}-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            var path = Path.Combine(dir, fileName);
+            File.WriteAllText(path, snapshotJson, System.Text.Encoding.UTF8);
+            return path;
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warn($"[{_ihLabel}] Pending-snapshot backup failed: {ex.Message}");
+            return null;
         }
     }
 
@@ -600,11 +760,17 @@ public partial class IhView : UserControl, IDisposable
 
     private void RunVdiValidationIfEnabled()
     {
-        if (!_settings.RunVdiValidation || _doc == null) return;
+        if (!_settings.RunVdiValidation || _doc == null)
+        {
+            UpdateFindingsUi(Array.Empty<ValidationFinding>());
+            return;
+        }
         try
         {
             var options = BuildValidationOptions(_settings);
             var findings = Vdi3682Validator.ValidateStructured(_doc, options);
+            UpdateFindingsUi(findings);
+
             if (findings.Count == 0)
             {
                 PluginLog.Debug($"[{_ihLabel}] VDI 3682 validation: clean.");
@@ -613,7 +779,7 @@ public partial class IhView : UserControl, IDisposable
             var errors   = findings.Count(f => f.Severity == ValidationSeverity.Error);
             var warnings = findings.Count(f => f.Severity == ValidationSeverity.Warning);
             var infos    = findings.Count(f => f.Severity == ValidationSeverity.Info);
-            SetStatus($"VDI 3682: {errors} error(s), {warnings} warning(s), {infos} info — see verbose log.");
+            SetStatus($"VDI 3682: {errors} error(s), {warnings} warning(s), {infos} info — see Findings panel.");
             foreach (var f in findings)
             {
                 var prefix = $"VDI3682 [{f.Severity}] {f.RuleId}";
@@ -626,6 +792,47 @@ public partial class IhView : UserControl, IDisposable
         {
             PluginLog.Error($"[{_ihLabel}] VDI validation threw", ex);
         }
+    }
+
+    /// <summary>
+    /// Mirror the latest findings into the bottom DataGrid + the summary label.
+    /// Marshalled to the UI thread because validation may run off-thread later.
+    /// </summary>
+    private void UpdateFindingsUi(IReadOnlyList<ValidationFinding> findings)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => UpdateFindingsUi(findings));
+            return;
+        }
+
+        _findings.Clear();
+        foreach (var f in findings) _findings.Add(FindingRow.From(f, _doc));
+
+        if (findings.Count == 0)
+        {
+            FindingsSummary.Text = " — no findings";
+        }
+        else
+        {
+            var e = findings.Count(f => f.Severity == ValidationSeverity.Error);
+            var w = findings.Count(f => f.Severity == ValidationSeverity.Warning);
+            var i = findings.Count(f => f.Severity == ValidationSeverity.Info);
+            FindingsSummary.Text = $" — {e} error · {w} warning · {i} info";
+        }
+    }
+
+    /// <summary>
+    /// Double-click on a finding asks the viewer to focus the corresponding
+    /// element. Bridge.SelectElement no-ops gracefully when the id is unknown
+    /// to the JS side (e.g. a project-level finding without an element id).
+    /// </summary>
+    private void FindingsGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (_disposed || _bridge == null) return;
+        if (FindingsGrid.SelectedItem is not FindingRow row) return;
+        if (string.IsNullOrEmpty(row.ElementId)) return;
+        _bridge.SelectElement(row.ElementId);
     }
 
     private static ValidationOptions BuildValidationOptions(PluginSettings settings)
@@ -654,6 +861,14 @@ public partial class IhView : UserControl, IDisposable
         StopLiveSync();
         try { _bridge?.Dispose(); } catch { /* best effort */ }
         _bridge = null;
+        // _bridge.Dispose only detaches the CoreWebView2 event handlers; the
+        // WebView2 control itself (and its msedgewebview2 child process) lives
+        // on until finalisation. Over a long session every doc-switch / New
+        // Process / Import spawns a fresh IhView, so without an explicit dispose
+        // the browser processes accumulate and drag the editor down. The control
+        // is owned by XAML but has already been pulled from the visual tree by
+        // the time DisposeAllIhViews clears the tab items.
+        try { WebView?.Dispose(); } catch { /* best effort */ }
         _pendingSnapshot = null;
         _pendingSnapshotTimestamp = DateTime.MinValue;
         _doc = null;

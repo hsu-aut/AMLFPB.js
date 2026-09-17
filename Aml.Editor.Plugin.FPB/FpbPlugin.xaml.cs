@@ -19,7 +19,7 @@ using Microsoft.Win32;
 
 namespace Aml.Editor.Plugin.FPB;
 
-public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsThemes, INotifyAMLDocumentLoad
+public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocumentLoad
 {
     private CAEXDocument? _currentDocument;
     private string? _currentFilePath;
@@ -46,6 +46,15 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     /// </summary>
     private CAEXDocument? _lastFullyRebuilt;
 
+    // Monotonic rebuild token. RebuildTabsForDocumentInner awaits WebView2 init
+    // per IH, and those awaits let a second rebuild (a fast doc-switch, "+ New
+    // Process", or a DocumentUnLoaded) interleave on the UI thread. Without a
+    // generation check the stale rebuild's continuation resumes after the newer
+    // one already cleared the tab strip and adds ghost tabs bound to the wrong /
+    // closed document. Each rebuild claims the next token and bails as soon as it
+    // sees a newer one; DocumentUnLoaded bumps it to cancel an in-flight rebuild.
+    private int _rebuildGeneration;
+
     // Per-IH pending-snapshot cache, keyed by (OriginID, IH-bare-id) instead
     // of (CAEXDocument, IH-bare-id). The editor occasionally hot-swaps its
     // CAEXDocument wrapper around the same file (see IsAlreadyRebuilt's
@@ -54,8 +63,12 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     // never matched. OriginID survives the swap.
     private readonly Dictionary<(string originId, string ihId), string> _pendingCache = new();
 
+    // OriginID names the authoring TOOL (same GUID in every editor-saved file);
+    // suffix the document's own FileName so two showcase files never share a
+    // cache identity.
     private static string OriginIdOf(CAEXDocument? doc) =>
-        doc?.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID ?? "";
+        (doc?.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID ?? "")
+        + "|" + (doc?.CAEXFile?.FileName ?? "");
 
     public FpbPlugin()
     {
@@ -89,28 +102,34 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             _compatResults = new List<ApiCompatCheck.CheckResult>();
         }
 
-        ToolBarCommands = new List<PluginCommand>
+        // Eager-compile the OCL rule set at startup so the first validation pass
+        // does not pay the parse/compile latency — important for the smoothness
+        // of the live demo. Failures surface in the startup log next to the
+        // ApiCompatCheck banner.
+        try
         {
-            // Toolbar contains the two cross-IH actions — actions that produce a
-            // brand new IH (i.e. a new sub-tab inside the viewer). Per-IH Update /
-            // Refresh / Export live in each viewer sub-tab.
-            new PluginCommand
-            {
-                CommandName = "New Process",
-                CommandButtonContent = new TextBlock { Text = "+ New Process", Margin = new Thickness(4, 0, 4, 0) },
-                Command = new RelayCommand<object>(p => ExecuteNewProcess(p), p => CanExecuteNewProcess(p)),
-                CommandToolTip = "Create an empty FPD InstanceHierarchy in the current AML document (one process, one SystemLimit). Use the FPB.js palette to model.",
-                IsCheckable = false,
-            },
-            new PluginCommand
-            {
-                CommandName = "Import FPB.js",
-                CommandButtonContent = new TextBlock { Text = "Import FPB.js", Margin = new Thickness(4, 0, 4, 0) },
-                Command = new RelayCommand<object>(p => ExecuteImport(p), p => CanExecuteImport(p)),
-                CommandToolTip = "Load an FPB.js JSON file and add its FPD content as a new InstanceHierarchy.",
-                IsCheckable = false,
-            },
-        };
+            if (Validation.Vdi3682OclRuleSet.EnsureCompiled())
+                PluginLog.Info("OCL rule set: compiled OK at startup.");
+            else
+                PluginLog.Error("OCL rule set: compile FAILED at startup. "
+                    + "The structural validator stays available; the OCL pass will "
+                    + "report a single warning until the cause is resolved. "
+                    + $"Cause: {Validation.Vdi3682OclRuleSet.CompileError?.Message}");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error("OCL EnsureCompiled threw at startup", ex);
+        }
+
+        // New Process and Import FPB.js are not on the editor toolbar. It shows the
+        // commands of one plugin at a time, so with AMLPetriNet loaded it put the
+        // Petri net commands into this tab, and otherwise the commands appeared
+        // twice. They live in each viewer's Process menu and, while there is no
+        // FPD hierarchy yet, in the empty placeholder.
+        _newProcessCommand = new RelayCommand<object>(p => ExecuteNewProcess(p), p => CanExecuteNewProcess(p));
+        _importCommand = new RelayCommand<object>(p => ExecuteImport(p), p => CanExecuteImport(p));
+        PlaceholderNewProcessButton.Command = _newProcessCommand;
+        PlaceholderImportButton.Command = _importCommand;
 
         Loaded += (_, __) =>
         {
@@ -167,7 +186,10 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     public override DockPositionEnum InitialDockPosition => DockPositionEnum.DockContent;
     public override bool CanClose => true;
 
-    public List<PluginCommand> ToolBarCommands { get; }
+    // New Process and Import FPB.js, shared by every viewer's Process menu and the
+    // empty placeholder, so enabling follows the document everywhere at once.
+    private readonly System.Windows.Input.ICommand _newProcessCommand;
+    private readonly System.Windows.Input.ICommand _importCommand;
 
     // ── Editor callbacks ────────────────────────────────────────────────
 
@@ -283,6 +305,9 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             foreach (var k in toRemove) _pendingCache.Remove(k);
         }
 
+        // Cancel any rebuild still awaiting WebView2 init: bump the token so its
+        // continuation bails instead of adding tabs for a now-closed document.
+        _rebuildGeneration++;
         DisposeAllIhViews();
         _currentDocument = null;
         _currentFilePath = null;
@@ -358,18 +383,34 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
     {
         if (_lastFullyRebuilt == null) return false;
         if (ReferenceEquals(doc, _lastFullyRebuilt)) return true;
+        // OriginID identifies the AUTHORING TOOL, not the document — every file
+        // the AML editor ever saved carries the same GUID. Origin alone made a
+        // second showcase file look "already rebuilt": its tabs never rendered
+        // and Update wrote into the wrong document. Require the document's own
+        // FileName to match too.
         var docOrigin = doc.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID;
         var lastOrigin = _lastFullyRebuilt.CAEXFile?.SourceDocumentInformation?.FirstOrDefault()?.OriginID;
-        return !string.IsNullOrEmpty(docOrigin) && string.Equals(docOrigin, lastOrigin, StringComparison.Ordinal);
+        if (string.IsNullOrEmpty(docOrigin) || !string.Equals(docOrigin, lastOrigin, StringComparison.Ordinal))
+            return false;
+        var docName = doc.CAEXFile?.FileName;
+        var lastName = _lastFullyRebuilt.CAEXFile?.FileName;
+        return !string.IsNullOrEmpty(docName)
+            && string.Equals(docName, lastName, StringComparison.OrdinalIgnoreCase);
     }
 
     private async Task RebuildTabsForDocumentInner(CAEXDocument doc)
     {
+        // Claim this rebuild's token AFTER the synchronous teardown below, so our
+        // own DisposeAllIhViews (which does not touch the token) never trips our
+        // own generation check. Any rebuild or DocumentUnLoaded that starts later
+        // bumps the token and makes this run bail at its next checkpoint.
         // Capture pending snapshots from the views we're about to tear down so
         // unsaved edits survive an undock/redock or doc-switch round trip.
         CapturePendingSnapshotsToCache();
 
         DisposeAllIhViews();
+
+        var myGen = ++_rebuildGeneration;
 
         var ihs = CaexToFpbJson.FindFpdInstanceHierarchies(doc).ToList();
         if (ihs.Count == 0)
@@ -383,9 +424,19 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
         int fallbackIndex = 1;
         foreach (var ih in ihs)
         {
+            // A newer rebuild (or a DocumentUnLoaded) superseded us while we were
+            // awaiting a previous IH's WebView2 init — stop before adding a tab
+            // that would belong to the wrong document.
+            if (myGen != _rebuildGeneration)
+            {
+                PluginLog.Debug($"Rebuild superseded (gen {myGen} < {_rebuildGeneration}) — aborting stale tab build.");
+                return;
+            }
+
             var label = !string.IsNullOrWhiteSpace(ih.Name) ? ih.Name : $"InstanceHierarchy {fallbackIndex++}";
 
             var view = new IhView();
+            view.UseDocumentCommands(_newProcessCommand, _importCommand);
             var tab = new TabItem
             {
                 Header = label,
@@ -404,6 +455,18 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             try
             {
                 await view.BindAsync(doc, ih, label, _settings);
+
+                // BindAsync awaited WebView2 init — re-check we weren't superseded
+                // while it ran. If so, dispose the view we just built (its browser
+                // process is live) and bail; DisposeAllIhViews already ran for the
+                // newer rebuild, so this orphan view is not in _orderedViews-of-record.
+                if (myGen != _rebuildGeneration)
+                {
+                    PluginLog.Debug($"Rebuild superseded (gen {myGen} < {_rebuildGeneration}) during BindAsync — discarding '{label}'.");
+                    try { view.Dispose(); } catch { /* best effort */ }
+                    return;
+                }
+
                 if (!string.IsNullOrEmpty(_activeTheme)) view.SendTheme(_activeTheme);
 
                 // Restore any cached pending snapshot for this (OriginID, IH) pair.
@@ -420,6 +483,7 @@ public partial class FpbPlugin : PluginViewBase, IToolBarIntegration, ISupportsT
             }
         }
 
+        if (myGen != _rebuildGeneration) return;
         if (IhTabs.Items.Count > 0) IhTabs.SelectedIndex = 0;
         PluginLog.Info($"Document opened: {ihs.Count} FPD InstanceHierarchy(ies) → {ihs.Count} viewer tab(s).");
     }

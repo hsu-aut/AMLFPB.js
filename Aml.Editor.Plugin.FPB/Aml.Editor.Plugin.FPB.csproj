@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <Version>0.6.19</Version>
+    <Version>0.7.3</Version>
     <Title>AMLFPB.js</Title>
     <Description>AutomationML Editor plugin for editing VDI 3682 Formalised Process Description (FPD) models. Embeds the FPB.js diagram canvas with live two-way sync between the diagram and the AML tree.</Description>
     <PackageTags>AMLEditor; AMLEditorPlugin.Net; AutomationML; FPB; VDI3682</PackageTags>
@@ -51,12 +51,24 @@
     <ProjectReference Include="..\..\fpb-aml-mapper\dotnet\FpbMapper.Conversion\FpbMapper.Conversion.csproj">
       <PrivateAssets>all</PrivateAssets>
     </ProjectReference>
+    <!-- OCL.NET engine: executes the FPD OCL rule set at runtime
+         (Vdi3682Validator's OCL pass, toggle: ValidationOptions.UseOclEngine).
+         The rule files themselves live in FpbMapper.Conversion. -->
+    <ProjectReference Include="..\..\..\OclNet\src\OCL.NET.Core\OCL.NET.Core.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\OclNet\src\OCL.NET.Caex\OCL.NET.Caex.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
   </ItemGroup>
 
   <!-- ─── Bundle DLLs into nupkg (from $(OutputPath), all guaranteed by the build) ── -->
   <ItemGroup>
     <None Include="$(OutputPath)$(AssemblyName).deps.json" Pack="true" PackagePath="lib\$(TargetFramework)" />
     <None Include="$(OutputPath)FpbMapper.Conversion.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="$(OutputPath)OCL.NET.Core.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="$(OutputPath)OCL.NET.Caex.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <None Include="$(OutputPath)Antlr4.Runtime.Standard.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
     <None Include="Metadata.xml" CopyToOutputDirectory="PreserveNewest" />
 
     <!-- WebView2 DLLs from the NuGet cache (Link ensures CopyToOutputDirectory works) -->

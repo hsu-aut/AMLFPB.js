@@ -19,8 +19,8 @@ public sealed class RefObjIntegrityRule : IValidationRule
         foreach (var proc in ProcessRuleHelpers.EnumerateProcesses(doc, ctx))
         {
             var refValue = proc.GetRefObjOrDerived();
-            if (string.IsNullOrEmpty(refValue)) continue;            // top-level process
-            if (ctx.ProcessOperatorIds.Contains(refValue)) continue;  // resolves
+            if (string.IsNullOrEmpty(refValue)) continue;                          // top-level process
+            if (ctx.ProcessOperatorIds.Contains(refValue.Trim('{', '}'))) continue; // resolves (brace-insensitive)
 
             findings.Add(new ValidationFinding(Id, ValidationSeverity.Error,
                 $"Process '{ProcessRuleHelpers.Label(proc)}': decomposition reference '{refValue}' does not resolve to any ProcessOperator (dangling decomposition).",

@@ -34,7 +34,7 @@ public class FpbJsonToCaexTests
         Assert.Contains(caexFile.InterfaceClassLib, l => l.Name == "VDI_FPD_InterfaceClassLib");
         Assert.Contains(caexFile.SystemUnitClassLib, l => l.Name == "VDI_FPD_SystemUnitClassLib");
         Assert.Contains(caexFile.AttributeTypeLib, l => l.Name == "VDI_FPD_AttributeTypeLib");
-        Assert.Contains(caexFile.AttributeTypeLib, l => l.Name == "VDI_FPD_DI_AttributeTypeLib");
+        Assert.Contains(caexFile.ExternalReference, e => e.Alias == FpbMapper.Conversion.DiagramInterchangeLibrary.Alias);
     }
 
     [Fact]

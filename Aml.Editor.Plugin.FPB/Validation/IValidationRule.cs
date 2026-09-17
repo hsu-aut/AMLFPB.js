@@ -42,12 +42,12 @@ public sealed class ValidationFinding
 }
 
 /// <summary>
-/// One discrete VDI 3682 structural rule. Each rule receives the document plus
-/// a pre-computed <see cref="ValidationContext"/> and appends findings to it.
+/// One discrete FPD structural rule. Each rule receives the document plus a
+/// pre-computed <see cref="ValidationContext"/> and appends findings to it.
 /// Rules MUST NOT mutate the document.
 ///
-/// Adding a new VDI 3682 (Blatt 2 / Blatt 3 / future) rule is now a matter of
-/// dropping a new class into <c>Vdi3682Rules/</c> and registering it in
+/// Adding a new rule is a matter of dropping a new class into
+/// <c>Vdi3682Rules/</c> and registering it in
 /// <see cref="Vdi3682Validator.DefaultRules"/>.
 /// </summary>
 public interface IValidationRule

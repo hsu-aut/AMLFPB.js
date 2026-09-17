@@ -64,8 +64,13 @@ public static class EditorSaver
 
                 if (!cmd.CanExecute(null))
                 {
-                    PluginLog.Debug($"Editor save reflection: {vmType.Name}.{name}.CanExecute(null) is false.");
-                    return false;
+                    // Keep looking: a later candidate (SaveCommand,
+                    // SaveActiveDocumentCommand, …) may be executable even when
+                    // this one isn't. Bailing out here disabled auto-save
+                    // whenever the first-named command happened to be context-
+                    // gated to false.
+                    PluginLog.Debug($"Editor save reflection: {vmType.Name}.{name}.CanExecute(null) is false — trying next candidate.");
+                    continue;
                 }
 
                 // Execute on the UI thread so WPF command-handler invariants hold.

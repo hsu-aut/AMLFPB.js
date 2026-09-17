@@ -27,15 +27,27 @@
                 <Border x:Name="NoIhPlaceholder"
                         Background="#F8F8F8"
                         Visibility="Visible">
-                    <TextBlock HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               Foreground="#666"
-                               FontSize="13"
-                               TextAlignment="Center"
-                               TextWrapping="Wrap"
-                               MaxWidth="500">
-                        Open an AML document with at least one InstanceHierarchy that contains an FPD_Process. Each FPD-bearing InstanceHierarchy will appear as its own tab here.
-                    </TextBlock>
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock HorizontalAlignment="Center"
+                                   Foreground="#666"
+                                   FontSize="13"
+                                   TextAlignment="Center"
+                                   TextWrapping="Wrap"
+                                   MaxWidth="500">
+                            Open an AML document with at least one InstanceHierarchy that contains an FPD_Process. Each FPD-bearing InstanceHierarchy will appear as its own tab here.
+                        </TextBlock>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,0">
+                            <Button x:Name="PlaceholderNewProcessButton"
+                                    Content="New Process"
+                                    Padding="10,3"
+                                    Margin="0,0,8,0"
+                                    ToolTip="Create an empty FPD InstanceHierarchy in the current AML document."/>
+                            <Button x:Name="PlaceholderImportButton"
+                                    Content="Import FPB.js JSON..."
+                                    Padding="10,3"
+                                    ToolTip="Load an FPB.js JSON file and add its FPD content as a new InstanceHierarchy."/>
+                        </StackPanel>
+                    </StackPanel>
                 </Border>
             </Grid>
         </TabItem>

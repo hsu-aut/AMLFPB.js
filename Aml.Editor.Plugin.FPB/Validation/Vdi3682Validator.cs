@@ -60,6 +60,14 @@ public static class Vdi3682Validator
             }
         }
 
+        // OCL pass: the FPD validation rule set, executed by the OCL.NET engine.
+        // Adds the rules the hard-coded set never covered (uniqueness, naming,
+        // orphans, self-references, …); overlapping rules are deduplicated inside
+        // the rule set. The hard-coded rules above remain the fallback when this
+        // is switched off.
+        if (options.UseOclEngine)
+            Vdi3682OclRuleSet.Append(doc, options, findings);
+
         // Filter by minimum severity threshold (e.g. show only Errors).
         if (options.MinimumSeverity > ValidationSeverity.Info)
             findings = findings.Where(f => f.Severity >= options.MinimumSeverity).ToList();
@@ -80,7 +88,7 @@ public static class Vdi3682Validator
         CaexElementWalker.WalkInternalElements(doc, ie =>
         {
             if (ie.RefBaseSystemUnitPath == sucPath && !string.IsNullOrEmpty(ie.ID))
-                set.Add(ie.ID);
+                set.Add(ie.ID.Trim('{', '}')); // brace-free: refObj stores the uniqueIdent form
         });
         return set;
     }
@@ -102,6 +110,13 @@ public sealed class ValidationOptions
 
     /// <summary>Lowest severity to include in the result list. Default = Info (all).</summary>
     public ValidationSeverity MinimumSeverity { get; init; } = ValidationSeverity.Info;
+
+    /// <summary>
+    /// Run the OCL engine pass (the FPD validation rule set via OCL.NET) in
+    /// addition to the hard-coded rules. Default on; switch off to fall back to
+    /// the hard-coded rules only.
+    /// </summary>
+    public bool UseOclEngine { get; init; } = true;
 
     public bool IsRuleDisabled(string ruleId) => DisabledRuleIds.Contains(ruleId);
 }
