@@ -323,11 +323,19 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
     }
 
+    /// <summary>
+    /// Not always the end: the editor also sends it when a plugin makes it open
+    /// another document, and loads that one next (UnloadFile with
+    /// closeApplication in the decompiled editor 6.4.3.5). Tearing down there
+    /// left the viewer without tabs when the same file was opened again (the
+    /// rebuild took it for rendered already), and the log closed for the rest
+    /// of the session. So the viewer is emptied as for a closed document and
+    /// the log stays open; it flushes every line, so a real exit loses nothing.
+    /// </summary>
     public void ApplicationClose()
     {
-        DisposeAllIhViews();
-        _pendingCache.Clear();
-        try { PluginLog.Shutdown(); } catch { /* swallow */ }
+        PluginLog.Debug("ApplicationClose: emptying the viewer (also sent before the editor opens another document).");
+        DocumentUnLoaded();
     }
 
     // ── ISupportsThemes ─────────────────────────────────────────────────
