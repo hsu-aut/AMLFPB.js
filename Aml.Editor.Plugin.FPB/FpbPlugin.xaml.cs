@@ -207,6 +207,13 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
 
         if (doc != null && !ReferenceEquals(doc, _lastPushedDocument))
         {
+            // The trees of external libraries report their selections too, with
+            // objects of other documents; they are not what the viewer shows.
+            if (!DocumentIdentity.IsOpenDocument(doc, _currentDocument, DocumentDiscoverer.TryFindCurrentDocument))
+            {
+                PluginLog.Debug($"ChangeSelectedObject: selection from another document ignored ({DescribeDoc(doc)}).");
+                return;
+            }
             _currentDocument = doc;
             _lastPushedDocument = doc;
             _ = RebuildTabsForDocumentAsync(doc);
