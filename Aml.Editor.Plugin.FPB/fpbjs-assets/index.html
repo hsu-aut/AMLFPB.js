@@ -302,6 +302,15 @@
           const t = (msg.theme === 'dark') ? 'dark' : 'light';
           document.documentElement.setAttribute('data-theme', t);
           try { localStorage.setItem('fpb-theme', t); } catch (_) { /* sandbox */ }
+        } else if (msg.type === 'setReadOnly') {
+          // View only: FPB.js keeps zoom, layers, search and export, and takes
+          // no edits. Older FPB.js builds do not have it.
+          if (typeof fpb.setReadOnly === 'function') {
+            fpb.setReadOnly(!!msg.readOnly);
+          } else if (msg.readOnly) {
+            post({ type: 'log', level: 'warn',
+              message: 'setReadOnly: this FPB.js build has no read-only mode' });
+          }
         } else if (msg.type === 'selectElement') {
           // Plugin-side UI (findings panel, AML tree, …) asks the viewer to
           // jump to a specific element. We select + scroll so it lands in the

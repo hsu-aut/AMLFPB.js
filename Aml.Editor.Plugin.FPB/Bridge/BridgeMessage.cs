@@ -34,6 +34,7 @@ public static class JsMessageType
     public const string ImportJSON      = "importJSON";
     public const string SetTheme        = "setTheme";
     public const string SelectElement   = "selectElement";
+    public const string SetReadOnly     = "setReadOnly";
 }
 
 /// <summary>
@@ -45,4 +46,11 @@ public sealed record SelectElementMessage([property: JsonPropertyName("type")] s
                                           [property: JsonPropertyName("id")] string Id)
 {
     public static SelectElementMessage For(string id) => new(JsMessageType.SelectElement, id);
+}
+
+/// <summary>Payload turning the viewer's read-only mode on or off (FPB.js setReadOnly).</summary>
+public sealed record SetReadOnlyMessage([property: JsonPropertyName("type")] string Type,
+                                        [property: JsonPropertyName("readOnly")] bool ReadOnly)
+{
+    public static SetReadOnlyMessage For(bool readOnly) => new(JsMessageType.SetReadOnly, readOnly);
 }

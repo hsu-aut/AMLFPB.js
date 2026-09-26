@@ -462,6 +462,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
             // Tab title follows IH.Name changes the user makes in the AML tree —
             // IhView raises LabelChanged after each Convert push when it notices drift.
             view.LabelChanged += (v, newLabel) => UpdateTabHeader(tab, newLabel, v.HasPendingSnapshot);
+            view.ViewOnlyChanged += (_, viewOnly) => SetViewOnly(viewOnly);
 
             IhTabs.Items.Add(tab);
             _orderedViews.Add(view);
@@ -706,6 +707,24 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
             _settings.DebugLogging = on;
             _settings.Save();
         }
+    }
+
+    /// <summary>View only for all viewer tabs, remembered in the settings.</summary>
+    private void SetViewOnly(bool viewOnly)
+    {
+        if (_settings.ViewOnly != viewOnly)
+        {
+            _settings.ViewOnly = viewOnly;
+            _settings.Save();
+        }
+        foreach (var view in _orderedViews)
+        {
+            try { view.ApplyViewOnly(viewOnly); }
+            catch (Exception ex) { PluginLog.Error("View only could not be applied to a tab", ex); }
+        }
+        LogStatus(viewOnly
+            ? "View only: the diagrams take no edits. Click View only again to edit."
+            : "Editing: the diagrams take edits again.");
     }
 
     private void AutoSaveToggle_Changed(object sender, RoutedEventArgs e)

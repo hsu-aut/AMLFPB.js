@@ -24,6 +24,9 @@ public sealed class PluginSettings
     [JsonPropertyName("confirm_large_updates")]    public bool ConfirmLargeUpdates { get; set; } = true;
     [JsonPropertyName("update_safety_threshold")]  public int  UpdateSafetyThreshold { get; set; } = 5;
 
+    /// <summary>The viewers show the model but take no edits (FPB.js read-only mode), in all tabs.</summary>
+    [JsonPropertyName("view_only")]                public bool ViewOnly { get; set; }
+
     /// <summary>
     /// When > 0, warn the user before applying a pending snapshot that is older
     /// than this many minutes. Defense against stale snapshots that lingered

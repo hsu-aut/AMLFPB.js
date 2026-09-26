@@ -45,6 +45,18 @@
                     <TextBlock Text="Refresh" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
+            <!-- View only: the diagram takes no edits (FPB.js read-only mode).
+                 Applies to all tabs and is remembered; Update, the Process menu
+                 and the exports stay, they are asked for explicitly. -->
+            <ToggleButton x:Name="ViewOnlyToggle"
+                          Checked="ViewOnlyToggle_Changed"
+                          Unchecked="ViewOnlyToggle_Changed"
+                          ToolTip="View only: look at the diagram, zoom, switch layers and export, but change nothing. Click again to edit.">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE72E;" Foreground="#606060"/>
+                    <TextBlock Text="View only" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ToggleButton>
             <Separator/>
             <!-- What a session needs every time stays a button of its own.
                  Creating, importing and exporting happen now and then, so they

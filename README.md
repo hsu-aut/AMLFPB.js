@@ -35,6 +35,7 @@ After installation, open any AML document with FPD content, or use **New Process
 
 - Changes in the FPB.js viewer are buffered until you click **Update** in the tab's toolbar. That writes the buffered changes into the CAEX document. `Ctrl+S` then persists them to disk.
 - Changes in the AML tree are picked up by the viewer automatically after a few seconds. **Refresh** forces an immediate refresh.
+- **View only** in the toolbar locks the diagrams of all tabs: zoom, pan, switch layers, search, check and export still work, but nothing can be moved, created, renamed or deleted. Click it again to edit. The plugin remembers the choice.
 
 ### Decomposition
 
@@ -116,10 +117,11 @@ Settings are persisted in `%APPDATA%\AutomationMLEditor\FpbPlugin\settings.json`
 | `run_vdi_validation` | `true` | Runs VDI 3682 structural checks automatically. |
 | `confirm_large_updates` | `true` | Shows a confirmation dialog when an update would touch many elements or connections. |
 | `update_safety_threshold` | `5` | Threshold for the confirmation dialog. |
+| `view_only` | `false` | The diagrams take no edits (the **View only** toggle in each tab's toolbar). |
 | `pending_age_warning_minutes` | `30` | Warns before applying a pending edit older than this. |
 | `disabled_validation_rules` | `[]` | List of VDI 3682 rule IDs to skip during validation. |
 
-The boolean toggles are exposed in the plugin's Diagnostics tab. The numeric values are edited in the JSON file directly.
+The boolean toggles are exposed in the plugin's Diagnostics tab, `view_only` in each tab's toolbar. The numeric values are edited in the JSON file directly.
 
 ## License
 

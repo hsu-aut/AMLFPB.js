@@ -57,6 +57,12 @@ public partial class IhView : UserControl, IDisposable
     /// <summary>Raised when the IH's display name drifts (host updates the tab header text).</summary>
     public event Action<IhView, string>? LabelChanged;
 
+    /// <summary>Raised when the user switches View only in this tab (the host applies it to all tabs and remembers it).</summary>
+    public event Action<IhView, bool>? ViewOnlyChanged;
+
+    // set while the host applies the state, so the toggle does not report it back
+    private bool _applyingViewOnly;
+
     public bool HasPendingSnapshot => !string.IsNullOrEmpty(_pendingSnapshot);
     public string IhLabel => _ihLabel;
     public InstanceHierarchyType? Ih => _ih;
@@ -156,6 +162,7 @@ public partial class IhView : UserControl, IDisposable
             HideJsErrorBanner();
         };
         _bridge.OnJsLog += (lvl, msg) => PluginLog.FromJs(lvl, $"[{_ihLabel}] {msg}");
+        ApplyViewOnly(settings.ViewOnly);
 
         try { await _bridge.InitAsync(); }
         catch (Exception ex) { PluginLog.Error($"[{_ihLabel}] WebView2 init failed", ex); }
@@ -164,6 +171,27 @@ public partial class IhView : UserControl, IDisposable
     }
 
     public void SendTheme(string theme) => _bridge?.SendTheme(theme);
+
+    /// <summary>Show the state on the toggle and hand it to the viewer, without raising <see cref="ViewOnlyChanged"/>.</summary>
+    public void ApplyViewOnly(bool viewOnly)
+    {
+        _applyingViewOnly = true;
+        try
+        {
+            if (ViewOnlyToggle != null) ViewOnlyToggle.IsChecked = viewOnly;
+        }
+        finally
+        {
+            _applyingViewOnly = false;
+        }
+        _bridge?.SetReadOnly(viewOnly);
+    }
+
+    private void ViewOnlyToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_applyingViewOnly) return;
+        ViewOnlyChanged?.Invoke(this, ViewOnlyToggle.IsChecked == true);
+    }
 
     private void ShowJsErrorBanner(string message)
     {

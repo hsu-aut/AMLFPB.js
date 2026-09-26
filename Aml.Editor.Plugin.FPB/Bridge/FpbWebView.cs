@@ -22,6 +22,9 @@ public sealed class FpbWebView : IDisposable
     private bool _ready;          // true on JS 'ready' message — only then is ImportJson safe
     private string? _pendingJson;
     private string? _pendingTheme;
+    // Wanted read-only state of the viewer; a reloaded page starts editable, so
+    // it is sent again on every 'ready'
+    private bool? _readOnly;
 
     private EventHandler<CoreWebView2WebMessageReceivedEventArgs>? _webMessageHandler;
     private EventHandler<CoreWebView2NavigationCompletedEventArgs>? _navigationHandler;
@@ -190,6 +193,20 @@ public sealed class FpbWebView : IDisposable
     }
 
     /// <summary>
+    /// Look, don't touch: the viewer shows the model but takes no edits (FPB.js
+    /// setReadOnly). Kept and sent again whenever the page (re)loads.
+    /// </summary>
+    public void SetReadOnly(bool readOnly)
+    {
+        if (_disposed) return;
+        _readOnly = readOnly;
+        if (!_ready || _view.CoreWebView2 == null) return;
+
+        var envelope = JsonSerializer.Serialize(SetReadOnlyMessage.For(readOnly));
+        _view.CoreWebView2.PostWebMessageAsJson(envelope);
+    }
+
+    /// <summary>
     /// Ask the viewer to select an element by id and scroll it into view. Used
     /// by host panels (findings DataGrid, AML tree integration, …). Silently
     /// no-ops if the bridge isn't ready yet — a missing select is recoverable,
@@ -272,6 +289,7 @@ public sealed class FpbWebView : IDisposable
     {
         if (_pendingJson is { } pj)  { _pendingJson  = null; ImportJson(pj); }
         if (_pendingTheme is { } pt) { _pendingTheme = null; SendTheme(pt); }
+        if (_readOnly is { } ro)     { SetReadOnly(ro); }
     }
 
     private void ReportError(string message)
