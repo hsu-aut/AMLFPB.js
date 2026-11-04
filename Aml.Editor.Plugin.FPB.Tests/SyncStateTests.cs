@@ -74,6 +74,17 @@ public class SyncStateTests
         Assert.False(reloaded.BarVisible);
     }
 
+    // final review 016f E3: the dialogs before applying pump the dispatcher,
+    // so a newer state of the diagram can arrive while they are open
+    [Theory]
+    [InlineData("a", "a", null)]
+    [InlineData("a", "b", "b")]
+    [InlineData("a", null, null)]
+    public void WhatStaysPendingAfterApplyingIsOnlyWhatCameLater(string applied, string? current, string? expected)
+    {
+        Assert.Equal(expected, SyncState.PendingAfterApply(applied, current));
+    }
+
     [Fact]
     public void BackToTheBaselineMeansNothingPending()
     {

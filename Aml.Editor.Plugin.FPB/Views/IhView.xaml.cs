@@ -324,7 +324,13 @@ public partial class IhView : UserControl, IDisposable
     }
 
     // ── Update-Button: push pending FPB.js state into the IH ──────────────
-    private void UpdateButton_Click(object sender, RoutedEventArgs e)
+    // The buttons act a moment later, at Background priority: a field of the
+    // panel writes its text when it loses the focus to the button, and that
+    // change should arrive before the snapshot is read (final review of 016f E3).
+    private void UpdateButton_Click(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(new Action(UpdateNow), DispatcherPriority.Background);
+
+    private void UpdateNow()
     {
         // Every other entry point in this class checks _disposed first.
         if (_disposed || _doc == null || _ih == null) return;
@@ -491,10 +497,12 @@ public partial class IhView : UserControl, IDisposable
             // _doc/_ih any further.
             if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-mapper — view disposed during operation."); return ApplyResult.Failed; }
 
-            _pendingSnapshot = null;
-            _pendingSnapshotTimestamp = DateTime.MinValue;
+            // a newer state that arrived during the questions stays pending
+            _pendingSnapshot = SyncState.PendingAfterApply(snapshot, _pendingSnapshot);
+            if (_pendingSnapshot == null) _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
             _sync.Applied();
+            if (_pendingSnapshot != null) _sync.DiagramChanged(equalsBaseline: false);
             UpdateConflictBar();
             _index = FpdElementIndex.Build(_ih);
             // Re-anchor the echo baseline on the state we just wrote into the
@@ -673,7 +681,10 @@ public partial class IhView : UserControl, IDisposable
     private void RefreshButton_Click(object sender, RoutedEventArgs e) => ReloadFromAml();
 
     // ── The bar of V28 ────────────────────────────────────────────────────
-    private void ApplyDiagramButton_Click(object sender, RoutedEventArgs e)
+    private void ApplyDiagramButton_Click(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(new Action(ApplyDiagramNow), DispatcherPriority.Background);
+
+    private void ApplyDiagramNow()
     {
         if (_disposed || _doc == null || _ih == null) return;
         // the diagram went back to what was loaded: nothing of it to keep

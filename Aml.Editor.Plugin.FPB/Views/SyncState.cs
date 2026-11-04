@@ -61,4 +61,12 @@ public sealed class SyncState
 
     /// <summary>The diagram was loaded from the AML again; its changes are gone.</summary>
     public void Reloaded() => Phase = SyncPhase.Clean;
+
+    /// <summary>
+    /// What stays pending after <paramref name="applied"/> was written into the
+    /// InstanceHierarchy: a newer state of the diagram that arrived meanwhile
+    /// (the questions before applying pump the dispatcher), else nothing.
+    /// </summary>
+    public static string? PendingAfterApply(string applied, string? current) =>
+        current == null || string.Equals(current, applied, StringComparison.Ordinal) ? null : current;
 }
