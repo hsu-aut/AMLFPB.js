@@ -19,6 +19,15 @@ public sealed class FindingRow
     public string ElementId { get; private init; } = "";
     public string ElementLabel { get; private init; } = "";
 
+    /// <summary>The layer of the element (016f E3, V25), empty when the diagram does not show it.</summary>
+    public string Layer { get; private init; } = "";
+
+    /// <summary>The layer id of a finding of FPB.js.</summary>
+    public string ProcessId { get; private init; } = "";
+
+    /// <summary>A finding of FPB.js: <see cref="ElementId"/> is the id in the diagram, not in the AML.</summary>
+    public bool FromDiagram { get; private init; }
+
     public string SeverityName { get; private init; } = "";
     public string SeverityGlyph { get; private init; } = "";
     public Brush SeverityBrush { get; private init; } = Brushes.Gray;
@@ -29,7 +38,7 @@ public sealed class FindingRow
     /// friendlier element label (IE name) — when it is null or the lookup
     /// misses we fall back to the bare id.
     /// </summary>
-    public static FindingRow From(ValidationFinding f, CAEXDocument? doc)
+    public static FindingRow From(ValidationFinding f, CAEXDocument? doc, string? layer = null)
     {
         var id = f.TargetIeId ?? "";
         var label = string.IsNullOrEmpty(id) ? "" : (LookupName(doc, id) ?? id);
@@ -43,10 +52,36 @@ public sealed class FindingRow
             // braced id made the jump miss silently for every mapper-built IE.
             ElementId = StripBraces(id),
             ElementLabel = label,
+            Layer = layer ?? "",
             SeverityName = f.Severity.ToString(),
             SeverityGlyph = GlyphFor(f.Severity),
             SeverityBrush = BrushFor(f.Severity),
             SeverityRank = RankFor(f.Severity),
+        };
+    }
+
+    /// <summary>A row for a finding of FPB.js (016f E3, V25).</summary>
+    public static FindingRow FromPage(PageFinding p, string? elementLabel, string? layer)
+    {
+        var severity = p.Severity switch
+        {
+            "error" => ValidationSeverity.Error,
+            "warning" => ValidationSeverity.Warning,
+            _ => ValidationSeverity.Info,
+        };
+        return new FindingRow
+        {
+            RuleId = p.Rule,
+            Message = p.Message,
+            ElementId = p.ElementId ?? "",
+            ElementLabel = elementLabel ?? p.ElementId ?? "",
+            Layer = layer ?? "",
+            ProcessId = p.ProcessId ?? "",
+            FromDiagram = true,
+            SeverityName = severity.ToString(),
+            SeverityGlyph = GlyphFor(severity),
+            SeverityBrush = BrushFor(severity),
+            SeverityRank = RankFor(severity),
         };
     }
 

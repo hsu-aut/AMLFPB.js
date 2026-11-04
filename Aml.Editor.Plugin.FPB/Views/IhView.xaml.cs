@@ -46,6 +46,11 @@ public partial class IhView : UserControl, IDisposable
     // why the last ApplyPending failed, for the status of Ctrl+S
     private string? _lastApplyError;
 
+    // the two checks of the findings list (V25)
+    private IReadOnlyList<ValidationFinding> _pluginFindings = Array.Empty<ValidationFinding>();
+    private IReadOnlyList<PageFinding> _pageFindings = Array.Empty<PageFinding>();
+    private HashSet<string> _pageRules = new(StringComparer.Ordinal);
+
     // 016f E3, V28: what the tab does when the InstanceHierarchy changes in the editor
     private readonly SyncState _sync = new();
 
@@ -171,6 +176,9 @@ public partial class IhView : UserControl, IDisposable
         _bridge.OnDiagramChanged += OnDiagramChangedFromJs;
         _bridge.OnSaveRequested += OnSaveFromPage;
         _bridge.OnSelected += OnSelectedInDiagram;
+        _bridge.OnFindings += OnFindingsFromPage;
+        // the markers of FPB.js go with "Run VDI validation" (V25)
+        _bridge.SetValidationMarkers(settings.RunVdiValidation);
         _bridge.OnImported += baseline =>
         {
             // Content-based echo detection (P0-8): the ack carries the viewer's
@@ -931,25 +939,22 @@ public partial class IhView : UserControl, IDisposable
     {
         if (!_settings.RunVdiValidation || _doc == null)
         {
-            UpdateFindingsUi(Array.Empty<ValidationFinding>());
+            _pluginFindings = Array.Empty<ValidationFinding>();
+            RefreshFindings();
             return;
         }
         try
         {
             var options = BuildValidationOptions(_settings);
-            var findings = Vdi3682Validator.ValidateStructured(_doc, options);
-            UpdateFindingsUi(findings);
+            _pluginFindings = Vdi3682Validator.ValidateStructured(_doc, options);
+            RefreshFindings();
 
-            if (findings.Count == 0)
+            if (_pluginFindings.Count == 0)
             {
                 PluginLog.Debug($"[{_ihLabel}] VDI 3682 validation: clean.");
                 return;
             }
-            var errors   = findings.Count(f => f.Severity == ValidationSeverity.Error);
-            var warnings = findings.Count(f => f.Severity == ValidationSeverity.Warning);
-            var infos    = findings.Count(f => f.Severity == ValidationSeverity.Info);
-            SetStatus($"VDI 3682: {errors} error(s), {warnings} warning(s), {infos} info — see Findings panel.");
-            foreach (var f in findings)
+            foreach (var f in _pluginFindings)
             {
                 var prefix = $"VDI3682 [{f.Severity}] {f.RuleId}";
                 if (f.Severity == ValidationSeverity.Error)   PluginLog.Error($"{prefix}: {f.Message}");
@@ -963,45 +968,107 @@ public partial class IhView : UserControl, IDisposable
         }
     }
 
+    // ── One list of findings (016f E3, V25) ───────────────────────────────
+
+    private void OnFindingsFromPage(IReadOnlyList<PageFinding> findings, IReadOnlyCollection<string> rules)
+    {
+        if (_disposed) return;
+        _pageFindings = findings;
+        _pageRules = new HashSet<string>(rules, StringComparer.Ordinal);
+        RefreshFindings();
+    }
+
+    /// <summary>The findings of FPB.js and of the plugin's check in one list, each once.</summary>
+    private void RefreshFindings()
+    {
+        if (!_settings.RunVdiValidation)
+        {
+            UpdateFindingsUi(Array.Empty<FindingRow>());
+            return;
+        }
+        var merged = FindingsMerge.Merge(_pluginFindings, _pageFindings, _pageRules, PlaceOf);
+        var rows = merged.Select(m => m.Plugin != null
+            ? FindingRow.From(m.Plugin, _doc, LayerOfObject(m.Plugin.TargetIeId))
+            : FindingRow.FromPage(m.Page!, LabelOfElement(m.Page!), m.Page!.ProcessId is { } layer ? _index.ProcessName(layer) : null))
+            .ToList();
+        UpdateFindingsUi(rows);
+    }
+
+    private TargetPlace PlaceOf(string target)
+    {
+        if (_index.Contains(target)) return TargetPlace.InDiagram;
+        if (_ih != null && ContainsObject(_ih.InternalElement, target)) return TargetPlace.InThisHierarchy;
+        if (_doc != null && CaexToFpbJson.FindFpdInstanceHierarchies(_doc)
+                .Any(ih => !string.Equals(ih.ID, _ih?.ID, StringComparison.OrdinalIgnoreCase) && ContainsObject(ih.InternalElement, target)))
+            return TargetPlace.OtherFpdHierarchy;
+        return TargetPlace.Elsewhere;
+    }
+
+    private static bool ContainsObject(IEnumerable<InternalElementType> elements, string bare)
+    {
+        static bool Same(string? id, string bare) => string.Equals((id ?? "").Trim('{', '}'), bare, StringComparison.OrdinalIgnoreCase);
+        foreach (var ie in elements)
+        {
+            if (Same(ie.ID, bare)) return true;
+            if (ie.InternalLink.Any(link => Same(link.ID, bare))) return true;
+            if (ContainsObject(ie.InternalElement, bare)) return true;
+        }
+        return false;
+    }
+
+    private string? LayerOfObject(string? objectId) =>
+        !string.IsNullOrEmpty(objectId) && _index.TryGetFpb(objectId, out _, out var layer) ? _index.ProcessName(layer) : null;
+
+    private string? LabelOfElement(PageFinding finding)
+    {
+        if (string.IsNullOrEmpty(finding.ElementId) || string.IsNullOrEmpty(finding.ProcessId)) return null;
+        var objectId = _index.IeIdFor(finding.ElementId, finding.ProcessId);
+        var found = objectId != null ? FindObject(objectId) : null;
+        return string.IsNullOrEmpty(found?.Name) ? null : found!.Name;
+    }
+
     /// <summary>
     /// Mirror the latest findings into the bottom DataGrid + the summary label.
     /// Marshalled to the UI thread because validation may run off-thread later.
     /// </summary>
-    private void UpdateFindingsUi(IReadOnlyList<ValidationFinding> findings)
+    private void UpdateFindingsUi(IReadOnlyList<FindingRow> rows)
     {
         if (!Dispatcher.CheckAccess())
         {
-            Dispatcher.Invoke(() => UpdateFindingsUi(findings));
+            Dispatcher.Invoke(() => UpdateFindingsUi(rows));
             return;
         }
 
         _findings.Clear();
-        foreach (var f in findings) _findings.Add(FindingRow.From(f, _doc));
+        foreach (var row in rows) _findings.Add(row);
 
-        if (findings.Count == 0)
+        if (rows.Count == 0)
         {
             FindingsSummary.Text = " — no findings";
         }
         else
         {
-            var e = findings.Count(f => f.Severity == ValidationSeverity.Error);
-            var w = findings.Count(f => f.Severity == ValidationSeverity.Warning);
-            var i = findings.Count(f => f.Severity == ValidationSeverity.Info);
+            var e = rows.Count(r => r.SeverityRank == 0);
+            var w = rows.Count(r => r.SeverityRank == 1);
+            var i = rows.Count(r => r.SeverityRank == 2);
             FindingsSummary.Text = $" — {e} error · {w} warning · {i} info";
         }
     }
 
     /// <summary>
-    /// Double-click on a finding asks the viewer to focus the corresponding
-    /// element. Bridge.Select no-ops gracefully when the id is unknown
-    /// to the JS side (e.g. a project-level finding without an element id).
+    /// Double-click on a finding shows its element in the diagram, on its layer.
+    /// A finding of the plugin goes through the index; one without an element
+    /// in the diagram does nothing.
     /// </summary>
     private void FindingsGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (_disposed || _bridge == null) return;
         if (FindingsGrid.SelectedItem is not FindingRow row) return;
         if (string.IsNullOrEmpty(row.ElementId)) return;
-        _bridge.Select(row.ElementId, null);
+        if (row.FromDiagram)
+            _bridge.Select(row.ElementId, string.IsNullOrEmpty(row.ProcessId) ? null : row.ProcessId);
+        else if (_index.TryGetFpb(row.ElementId, out var fpbId, out var processId))
+            _bridge.Select(fpbId, processId);
     }
 
     private static ValidationOptions BuildValidationOptions(PluginSettings settings)

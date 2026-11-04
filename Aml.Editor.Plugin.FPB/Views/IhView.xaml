@@ -269,6 +269,7 @@
                     </DataGridTemplateColumn>
                     <DataGridTextColumn Header="Rule" Binding="{Binding RuleId}" Width="220"/>
                     <DataGridTextColumn Header="Element" Binding="{Binding ElementLabel}" Width="160"/>
+                    <DataGridTextColumn Header="Layer" Binding="{Binding Layer}" Width="120"/>
                     <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
                 </DataGrid.Columns>
             </DataGrid>

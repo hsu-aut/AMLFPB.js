@@ -4,6 +4,7 @@ using System.Reflection;
 using System.Text.Json;
 using System.Windows;
 using Aml.Editor.Plugin.FPB.Diagnostics;
+using Aml.Editor.Plugin.FPB.Validation;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
 using Microsoft.Win32;
@@ -51,6 +52,8 @@ public sealed class FpbWebView : IDisposable
     /// <summary>Ctrl+S in the diagram (V22), with the model of that moment.</summary>
     public event Action<JsonElement>? OnSaveRequested;
     public event Action<string?>?    OnProcessSwitched;
+    /// <summary>The model check of FPB.js ran (V25): its findings and the catalog rules it checks.</summary>
+    public event Action<IReadOnlyList<PageFinding>, IReadOnlyCollection<string>>? OnFindings;
     /// <summary>The selection of the diagram changed (V26): element id and layer, the id null when nothing is selected.</summary>
     public event Action<string?, string?>? OnSelected;
     public event Action<string,string>? OnJsLog;   // (level, message) — for diagnostics
@@ -387,6 +390,10 @@ public sealed class FpbWebView : IDisposable
                 OnSelected?.Invoke(msg.Id, msg.ProcessId);
                 break;
 
+            case JsMessageType.Findings:
+                OnFindings?.Invoke(ReadFindings(msg.Items), ReadStrings(msg.Rules));
+                break;
+
             case JsMessageType.Error:
                 ReportError(msg.Message ?? "(unspecified)");
                 break;
@@ -416,6 +423,30 @@ public sealed class FpbWebView : IDisposable
                 ReportError($"Unknown JS message type: '{msg.Type}'.");
                 break;
         }
+    }
+
+    private static IReadOnlyList<PageFinding> ReadFindings(JsonElement items)
+    {
+        var findings = new List<PageFinding>();
+        if (items.ValueKind != JsonValueKind.Array) return findings;
+        string? Text(JsonElement item, string name) =>
+            item.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            findings.Add(new PageFinding(Text(item, "rule") ?? "", Text(item, "severity") ?? "info",
+                Text(item, "message") ?? "", Text(item, "elementId"), Text(item, "processId")));
+        }
+        return findings;
+    }
+
+    private static IReadOnlyCollection<string> ReadStrings(JsonElement values)
+    {
+        var strings = new HashSet<string>(StringComparer.Ordinal);
+        if (values.ValueKind != JsonValueKind.Array) return strings;
+        foreach (var value in values.EnumerateArray())
+            if (value.ValueKind == JsonValueKind.String && value.GetString() is { } s) strings.Add(s);
+        return strings;
     }
 
     private void FlushPending()
