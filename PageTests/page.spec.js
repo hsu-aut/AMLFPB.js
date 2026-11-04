@@ -29,6 +29,8 @@ const breakRule = (page) => page.evaluate((id) => {
 test('the page loads FPB.js 2.0 without React, Bootstrap or an import map', async ({ page }) => {
   const { requests, errors } = await openPluginPage(page);
   expect(requests.filter((r) => r.includes('/vendor/'))).toEqual([]);
+  // since 2.0 the styles of diagram-js come with the bundle (Umstieg-2.0, "Stile und Dateien")
+  expect(requests).not.toContain('/css/diagram-js.css');
   await expect(page.locator('script[type=importmap]')).toHaveCount(0);
   expect((await posted(page, 'ready')).length).toBe(1);
   expect(errors).toEqual([]);
