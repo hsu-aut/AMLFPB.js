@@ -185,9 +185,9 @@
                 </Border>
             </StackPanel>
 
-            <!-- a file dropped on the diagram opens nothing (V14); keys stay in
-                 the diagram (V24, DiagramWebView) -->
-            <local:DiagramWebView Grid.Row="1" x:Name="WebView" AllowExternalDrop="False"/>
+            <!-- keys stay in the diagram (V24, DiagramWebView); AllowExternalDrop is
+                 set in the constructor, see there -->
+            <local:DiagramWebView Grid.Row="1" x:Name="WebView"/>
             <Border Grid.Row="1"
                     x:Name="WebViewPlaceholder"
                     Background="{DynamicResource MahApps.Brushes.ThemeBackground}"

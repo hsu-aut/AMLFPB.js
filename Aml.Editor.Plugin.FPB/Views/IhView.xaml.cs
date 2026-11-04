@@ -122,7 +122,14 @@ public partial class IhView : UserControl, IDisposable
     {
         InitializeComponent();
         FindingsGrid.ItemsSource = _findings;
+        // A file dropped on the diagram opens nothing (V14). Set here, not in
+        // XAML: in the editor the XAML loader took the property from another
+        // plugin's copy of the WebView2 library and threw, so no tab was built.
+        WebView.AllowExternalDrop = false;
     }
+
+    /// <summary>Whether a file dropped on the diagram reaches the page (V14: no).</summary>
+    public bool AcceptsDroppedFiles => WebView.AllowExternalDrop;
 
     /// <summary>
     /// Hands the view the plugin's document-level commands for its Process menu.
@@ -192,12 +199,23 @@ public partial class IhView : UserControl, IDisposable
         };
         _bridge.OnJsLog += (lvl, msg) => PluginLog.FromJs(lvl, $"[{_ihLabel}] {msg}");
         ApplyViewOnly(settings.ViewOnly);
-
-        // DevTools and the browser's context menu only for "Verbose debug logging" (V16)
-        try { await _bridge.InitAsync(settings.DebugLogging); }
-        catch (Exception ex) { PluginLog.Error($"[{_ihLabel}] WebView2 init failed", ex); }
-
         StartLiveSync();
+
+        // Not awaited: WebView2 starts only once its control has a window, that
+        // is once this tab is shown. A tab not selected, or the plugin's pane
+        // behind another one when the document opened, has none; awaiting here
+        // held up the later tabs and the selection of the first, and the plugin
+        // stayed empty (016f E3, run in the real editor). Until the page is
+        // ready, the bridge buffers what is sent.
+        _ = InitBridgeAsync(settings.DebugLogging);
+        await Task.CompletedTask;
+    }
+
+    private async Task InitBridgeAsync(bool debugTools)
+    {
+        // DevTools and the browser's context menu only for "Verbose debug logging" (V16)
+        try { if (_bridge != null) await _bridge.InitAsync(debugTools); }
+        catch (Exception ex) { PluginLog.Error($"[{_ihLabel}] WebView2 init failed", ex); }
     }
 
     public void SendTheme(string theme) => _bridge?.SendTheme(theme);
