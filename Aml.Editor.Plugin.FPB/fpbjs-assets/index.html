@@ -205,15 +205,21 @@
       post({ type: 'findings', rules: fpb.getCheckedRules(), items: fpb.getFindings() });
     });
 
-    // Ctrl+S saves through the editor. A field of the properties panel has
-    // written what was typed before this listener runs (bubbling phase).
+    // Ctrl+S saves through the editor. Listened to in the capture phase: the
+    // label editor of diagram-js stops every key before it bubbles. A label
+    // being edited on the canvas completes when it loses the focus; a field of
+    // the properties panel writes what was typed in its own handler, after
+    // this one, so the model is read a task later.
     window.addEventListener('keydown', (event) => {
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === 's' || event.key === 'S')) {
-        event.preventDefault();
+      if (!((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === 's' || event.key === 'S'))) return;
+      event.preventDefault();
+      const active = document.activeElement;
+      if (active && active.isContentEditable) active.blur();
+      setTimeout(() => {
         const data = snapshot();
         if (data !== null) post({ type: 'save', data });
-      }
-    });
+      }, 0);
+    }, true);
 
     window.chrome.webview.addEventListener('message', (e) => {
       const message = e.data;

@@ -90,6 +90,18 @@ test('Ctrl+S posts save with the text just typed in a field', async ({ page }) =
   expect(downloads).toBe(0);
 });
 
+// final review 016f E3: the label editor of diagram-js stops every key
+test('Ctrl+S while a label is edited on the canvas saves the new label', async ({ page }) => {
+  await openPluginPage(page);
+  await importModel(page);
+  await page.locator(`.djs-element[data-element-id="${PRUEFEN}"]`).dblclick();
+  await expect(page.locator('.djs-direct-editing-parent')).toBeVisible();
+  await page.keyboard.type('ZZ');
+  await page.keyboard.press('Control+s');
+  await expect.poll(async () => (await posted(page, 'save')).length).toBe(1);
+  expect(JSON.stringify((await posted(page, 'save'))[0].data)).toContain('ZZ');
+});
+
 test('findings come with the rules FPB.js checks and the layer of each', async ({ page }) => {
   await openPluginPage(page);
   await importModel(page);
