@@ -210,14 +210,12 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
     /// </summary>
     public event EventHandler<SelectionEventArgs>? Selected;
 
-    // the object selected last, from either side: a selection that only goes
-    // back to where it came from is not passed on again
-    private string? _editorSelection;
+    // a selection that only goes back to where it came from is not passed on again
+    private readonly SelectionEcho _selectionEcho = new();
 
     private void OnElementSelectedInDiagram(IhView view, CAEXObject selected)
     {
-        if (string.Equals(selected.ID, _editorSelection, StringComparison.OrdinalIgnoreCase)) return;
-        _editorSelection = selected.ID;
+        if (!_selectionEcho.ToTree(selected.ID)) return;
         try
         {
             Selected?.Invoke(this, new ExtendedSelectionEventArgs(selected) { Select = true, Expand = true });
@@ -237,6 +235,8 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
     /// </summary>
     private void FollowEditorSelection(CAEXBasicObject selectedObject)
     {
+        // whatever the tree selected, the diagram's next selection goes there again
+        _selectionEcho.FromTree(null);
         InstanceHierarchyType? ih = null;
         for (var o = selectedObject; o != null; o = o.CAEXParent as CAEXBasicObject)
             if (o is InstanceHierarchyType found) { ih = found; break; }
@@ -246,8 +246,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         var tab = IhTabs.Items.OfType<TabItem>().FirstOrDefault(t => ReferenceEquals(t.Content, view));
         if (tab != null && !ReferenceEquals(IhTabs.SelectedItem, tab)) IhTabs.SelectedItem = tab;
         if (selectedObject is InstanceHierarchyType) return;
-        var shown = view.SelectFromEditor(selectedObject);
-        if (shown != null) _editorSelection = shown;
+        _selectionEcho.FromTree(view.SelectFromEditor(selectedObject));
     }
 
     public override void ChangeSelectedObject(CAEXBasicObject selectedObject)
