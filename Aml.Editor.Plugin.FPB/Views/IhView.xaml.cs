@@ -46,8 +46,11 @@ public partial class IhView : UserControl, IDisposable
     // why the last ApplyPending failed, for the status of Ctrl+S
     private string? _lastApplyError;
 
-    /// <summary>The bar of a conflict stands (V28); set in Task 6 of 016f E3.</summary>
-    private bool InConflict => false;
+    // 016f E3, V28: what the tab does when the InstanceHierarchy changes in the editor
+    private readonly SyncState _sync = new();
+
+    /// <summary>The bar of a conflict stands (V28).</summary>
+    private bool InConflict => _sync.Phase == SyncPhase.Conflict;
 
     private DispatcherTimer? _liveSyncTimer;
     private static readonly TimeSpan LiveSyncPollInterval = TimeSpan.FromSeconds(2);
@@ -87,6 +90,7 @@ public partial class IhView : UserControl, IDisposable
     {
         if (string.IsNullOrEmpty(snapshot)) return;
         _pendingSnapshot = snapshot;
+        _sync.DiagramChanged(equalsBaseline: false);
         // The cache survived a doc switch but we have no original timestamp,
         // so treat the restore moment as the snapshot's age start. Worst case:
         // user gets the stale-snapshot warning slightly later than ideal.
@@ -396,6 +400,8 @@ public partial class IhView : UserControl, IDisposable
             _pendingSnapshot = null;
             _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
+            _sync.Applied();
+            UpdateConflictBar();
             // Re-anchor the echo baseline on the state we just wrote into the
             // document. Viewer == document == baseline now; a later undo back
             // to the PRE-update state differs from this baseline and correctly
@@ -569,7 +575,35 @@ public partial class IhView : UserControl, IDisposable
     }
 
     // ── Refresh-Button: re-render this tab from the current AML state ─────
-    private void RefreshButton_Click(object sender, RoutedEventArgs e)
+    private void RefreshButton_Click(object sender, RoutedEventArgs e) => ReloadFromAml();
+
+    // ── The bar of V28 ────────────────────────────────────────────────────
+    private void ApplyDiagramButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_disposed || _doc == null || _ih == null) return;
+        // the diagram went back to what was loaded: nothing of it to keep
+        if (!HasPendingSnapshot)
+        {
+            ReloadFromAml();
+            return;
+        }
+        if (ApplyPending() == ApplyResult.Applied && !_disposed)
+            SetStatus("Applied the diagram to the InstanceHierarchy. Press Ctrl+S to save the file.");
+    }
+
+    private void ReloadFromAmlButton_Click(object sender, RoutedEventArgs e) => ReloadFromAml();
+
+    private void UpdateConflictBar()
+    {
+        if (ConflictBar != null) ConflictBar.Visibility = _sync.BarVisible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Load the diagram from the AML again ("Refresh from AML", "Reload from
+    /// AML"). Changes of the diagram that are not applied are lost; they are
+    /// kept as a backup in %TEMP% first.
+    /// </summary>
+    private void ReloadFromAml()
     {
         if (_doc == null || _ih == null) return;
         try
@@ -578,17 +612,20 @@ public partial class IhView : UserControl, IDisposable
             // nothing" can verify from the log whether the conversion actually
             // produced the same content or got dropped on the WebView2 floor.
             var hashBefore = _lastIhHash;
-            var hadPending = _pendingSnapshot != null;
-            PluginLog.Debug($"[{_ihLabel}] Refresh: pending={(hadPending ? "discarded" : "none")} hash-before={hashBefore:X8}");
+            var pending = _pendingSnapshot;
+            PluginLog.Debug($"[{_ihLabel}] Refresh: pending={(pending != null ? "discarded" : "none")} hash-before={hashBefore:X8}");
+            var backupPath = pending != null ? TryWritePendingBackup(pending) : null;
 
             PushIhToWebView();
             _pendingSnapshot = null;
-        _pendingSnapshotTimestamp = DateTime.MinValue;
+            _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
+            _sync.Reloaded();
+            UpdateConflictBar();
             _lastIhHash = ComputeIhHash(_ih);
 
             PluginLog.Debug($"[{_ihLabel}] Refresh: hash-after={_lastIhHash:X8} changed={(hashBefore != _lastIhHash)}");
-            SetStatus("Viewer re-rendered from current AML.");
+            SetStatus("Viewer re-rendered from current AML." + (backupPath != null ? $" Backup of the dropped diagram changes: {backupPath}" : ""));
         }
         catch (Exception ex)
         {
@@ -687,6 +724,7 @@ public partial class IhView : UserControl, IDisposable
                 // undid their edit). A stale pending snapshot from before the
                 // undo must not survive — Update would write the already-
                 // reverted edit into the AML.
+                _sync.DiagramChanged(equalsBaseline: true);
                 if (_pendingSnapshot != null)
                 {
                     PluginLog.Debug($"[{_ihLabel}] viewer returned to baseline — clearing stale pending snapshot.");
@@ -708,6 +746,7 @@ public partial class IhView : UserControl, IDisposable
 
         _pendingSnapshot = raw;
         _pendingSnapshotTimestamp = DateTime.UtcNow;
+        _sync.DiagramChanged(equalsBaseline: false);
         OnPendingStateChanged();
         Dispatcher.BeginInvoke(() =>
             System.Windows.Input.CommandManager.InvalidateRequerySuggested());
@@ -750,32 +789,25 @@ public partial class IhView : UserControl, IDisposable
             var hashBefore = _lastIhHash;
             _lastIhHash = hash;
 
-            // Conflict: user has unsynced FPB.js edits AND the AML tree changed.
-            // Drop pending and warn so we don't later silently overwrite the tree.
-            // Before dropping, dump the snapshot to a TEMP backup so the user has
-            // a recovery path if the discarded edits were valuable.
-            if (!string.IsNullOrEmpty(_pendingSnapshot))
+            // 016f E3, V28: a change in the editor never drops edits of the
+            // diagram. Without pending edits the diagram reloads quietly; with
+            // them the bar asks, and nothing reloads until the user chooses.
+            switch (_sync.TreeChanged())
             {
-                var backupPath = TryWritePendingBackup(_pendingSnapshot);
-                var locationHint = backupPath is null
-                    ? string.Empty
-                    : $" Backup written to {backupPath}.";
-
-                PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while FPB.js had unsynced edits — pending viewer edits dropped." +
-                               locationHint +
-                               $" hash-before={hashBefore:X8} hash-now={hash:X8} pending-bytes={_pendingSnapshot.Length}");
-                SetStatus("Tree changed externally — pending viewer edits dropped." + locationHint);
-                _pendingSnapshot = null;
-                _pendingSnapshotTimestamp = DateTime.MinValue;
-                OnPendingStateChanged();
+                case TreeChangeAction.Reload:
+                    PluginLog.Debug($"[{_ihLabel}] Live sync: AML hash changed {hashBefore:X8} -> {hash:X8}, refreshing viewer.");
+                    PushIhToWebView();
+                    break;
+                case TreeChangeAction.ShowBar:
+                    PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while the diagram had edits that are not applied — asking." +
+                                   $" hash-before={hashBefore:X8} hash-now={hash:X8}");
+                    UpdateConflictBar();
+                    SetStatus("The InstanceHierarchy was changed in the editor. Choose Apply diagram or Reload from AML.");
+                    break;
+                default:
+                    PluginLog.Debug($"[{_ihLabel}] Live sync: AML changed again while the bar stands.");
+                    break;
             }
-            else
-            {
-                PluginLog.Debug($"[{_ihLabel}] Live sync: AML hash changed {hashBefore:X8} -> {hash:X8} (no pending edits to drop)");
-            }
-
-            PluginLog.Debug($"[{_ihLabel}] external change detected, refreshing viewer.");
-            PushIhToWebView();
         }
         catch (Exception ex)
         {

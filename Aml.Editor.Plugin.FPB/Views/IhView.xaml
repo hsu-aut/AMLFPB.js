@@ -99,9 +99,95 @@
         </ToolBar>
 
         <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Bars above the diagram take a row of their own: WPF cannot draw
+                 over the WebView2 (airspace). -->
+            <StackPanel Grid.Row="0">
+                <!-- 016f E3, V28: the InstanceHierarchy changed in the editor while
+                     the diagram had changes that are not applied -->
+                <Border x:Name="ConflictBar"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource MahApps.Brushes.ThemeBackground}"
+                        BorderBrush="{DynamicResource MahApps.Brushes.Accent}"
+                        BorderThickness="0,0,0,2"
+                        Padding="12,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="&#xE7BA;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="16"
+                                   Foreground="{DynamicResource MahApps.Brushes.Accent}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                        <TextBlock Grid.Column="1"
+                                   x:Name="ConflictMessage"
+                                   Text="The InstanceHierarchy was changed in the editor. The diagram has changes that are not in it yet."
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="2"
+                                x:Name="ApplyDiagramButton"
+                                Content="Apply diagram"
+                                Click="ApplyDiagramButton_Click"
+                                Margin="12,0,0,0"
+                                Padding="8,2"/>
+                        <Button Grid.Column="3"
+                                x:Name="ReloadFromAmlButton"
+                                Content="Reload from AML"
+                                Click="ReloadFromAmlButton_Click"
+                                Margin="8,0,0,0"
+                                Padding="8,2"/>
+                    </Grid>
+                </Border>
+                <Border x:Name="JsErrorBanner"
+                        Background="#FFF3CD"
+                        BorderBrush="#FFE69C"
+                        BorderThickness="0,0,0,1"
+                        Padding="12,8"
+                        Visibility="Collapsed">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="&#xE7BA;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="16"
+                                   Foreground="#856404"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                        <TextBlock Grid.Column="1"
+                                   x:Name="JsErrorMessage"
+                                   Text=""
+                                   TextWrapping="Wrap"
+                                   Foreground="#856404"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="2"
+                                x:Name="JsErrorRetryButton"
+                                Content="Refresh from AML"
+                                Click="JsErrorRetryButton_Click"
+                                Margin="12,0,0,0"
+                                Padding="8,2"/>
+                    </Grid>
+                </Border>
+            </StackPanel>
+
             <!-- a file dropped on the diagram opens nothing (V14) -->
-            <wv2:WebView2 x:Name="WebView" AllowExternalDrop="False"/>
-            <Border x:Name="WebViewPlaceholder"
+            <wv2:WebView2 Grid.Row="1" x:Name="WebView" AllowExternalDrop="False"/>
+            <Border Grid.Row="1"
+                    x:Name="WebViewPlaceholder"
                     Background="#F8F8F8"
                     Visibility="Visible">
                 <TextBlock Text="Loading FPB.js viewer…"
@@ -109,40 +195,6 @@
                            VerticalAlignment="Center"
                            Foreground="#666"
                            FontSize="13"/>
-            </Border>
-            <Border x:Name="JsErrorBanner"
-                    Background="#FFF3CD"
-                    BorderBrush="#FFE69C"
-                    BorderThickness="0,0,0,1"
-                    Padding="12,8"
-                    Visibility="Collapsed"
-                    VerticalAlignment="Top">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0"
-                               Text="&#xE7BA;"
-                               FontFamily="Segoe MDL2 Assets"
-                               FontSize="16"
-                               Foreground="#856404"
-                               VerticalAlignment="Center"
-                               Margin="0,0,8,0"/>
-                    <TextBlock Grid.Column="1"
-                               x:Name="JsErrorMessage"
-                               Text=""
-                               TextWrapping="Wrap"
-                               Foreground="#856404"
-                               VerticalAlignment="Center"/>
-                    <Button Grid.Column="2"
-                            x:Name="JsErrorRetryButton"
-                            Content="Refresh from AML"
-                            Click="JsErrorRetryButton_Click"
-                            Margin="12,0,0,0"
-                            Padding="8,2"/>
-                </Grid>
             </Border>
         </Grid>
 
