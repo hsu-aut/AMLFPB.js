@@ -130,7 +130,7 @@ Settings are persisted in `%APPDATA%\AutomationMLEditor\FpbPlugin\settings.json`
 
 | Key | Default | Effect |
 |---|---|---|
-| `debug_logging` | `false` | Forwards the JavaScript console to the log file; tabs opened afterwards also get the DevTools (F12) and the browser's context menu. |
+| `debug_logging` | `false` | Forwards the JavaScript console to the log file; tabs opened afterwards also get the browser's context menu with Inspect (the DevTools). |
 | `auto_save_after_update` | `false` | Triggers the editor's save command after each Update InstanceHierarchy. |
 | `run_vdi_validation` | `true` | Runs the VDI 3682 checks and fills the findings list; off also hides the markers of FPB.js. |
 | `confirm_large_updates` | `true` | Shows a confirmation dialog when an update would touch many elements or connections. |
