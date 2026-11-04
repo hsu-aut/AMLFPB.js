@@ -48,6 +48,8 @@ public sealed class FpbWebView : IDisposable
     public event Action<string>? OnError;
     public event Action<string>? OnInfo;
     public event Action<JsonElement>? OnDiagramChanged;
+    /// <summary>Ctrl+S in the diagram (V22), with the model of that moment.</summary>
+    public event Action<JsonElement>? OnSaveRequested;
     public event Action<string?>?    OnProcessSwitched;
     public event Action<string,string>? OnJsLog;   // (level, message) — for diagnostics
 
@@ -366,6 +368,13 @@ public sealed class FpbWebView : IDisposable
                     || msg.Data.ValueKind == JsonValueKind.Null)
                     break;   // P0-5: defend the host's GetRawText() call
                 OnDiagramChanged?.Invoke(msg.Data);
+                break;
+
+            case JsMessageType.Save:
+                if (msg.Data.ValueKind == JsonValueKind.Undefined
+                    || msg.Data.ValueKind == JsonValueKind.Null)
+                    break;
+                OnSaveRequested?.Invoke(msg.Data);
                 break;
 
             case JsMessageType.ProcessSwitched:

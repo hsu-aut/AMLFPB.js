@@ -43,6 +43,11 @@ public partial class IhView : UserControl, IDisposable
     private string? _echoBaseline;
     private bool _liveSyncSuppressed;
     private bool _disposed;
+    // why the last ApplyPending failed, for the status of Ctrl+S
+    private string? _lastApplyError;
+
+    /// <summary>The bar of a conflict stands (V28); set in Task 6 of 016f E3.</summary>
+    private bool InConflict => false;
 
     private DispatcherTimer? _liveSyncTimer;
     private static readonly TimeSpan LiveSyncPollInterval = TimeSpan.FromSeconds(2);
@@ -150,6 +155,7 @@ public partial class IhView : UserControl, IDisposable
                               "The diagram may be incomplete. Try Refresh from AML, or check the log file for details.");
         };
         _bridge.OnDiagramChanged += OnDiagramChangedFromJs;
+        _bridge.OnSaveRequested += OnSaveFromPage;
         _bridge.OnImported += baseline =>
         {
             // Content-based echo detection (P0-8): the ack carries the viewer's
@@ -280,12 +286,58 @@ public partial class IhView : UserControl, IDisposable
     {
         // Every other entry point in this class checks _disposed first.
         if (_disposed || _doc == null || _ih == null) return;
-        var snapshot = _pendingSnapshot;
-        if (string.IsNullOrEmpty(snapshot))
+        if (string.IsNullOrEmpty(_pendingSnapshot))
         {
             SetStatus("No pending viewer changes to apply.");
             return;
         }
+        if (ApplyPending() != ApplyResult.Applied || _disposed) return;
+
+        var swSave = System.Diagnostics.Stopwatch.StartNew();
+        var saveAttempted = _settings.AutoSaveAfterUpdate;
+        // EditorSaver may trigger ChangeSelectedObject as a side-effect,
+        // which can dispose this view mid-call. Check after.
+        var saveOk = saveAttempted && EditorSaver.TrySaveActiveDocument();
+        swSave.Stop();
+        if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-save — view disposed (likely by editor's save-side-effect)."); return; }
+        if (saveAttempted) PluginLog.Info($"[{_ihLabel}] Update save: {swSave.ElapsedMilliseconds}ms");
+
+        if (saveOk)
+            SetStatus("Updated. Editor save command invoked (Ctrl+S still works manually).");
+        else if (saveAttempted)
+            SetStatus("Updated. Auto-save unavailable — press Ctrl+S to persist.");
+        else
+            SetStatus("Updated. Press Ctrl+S to persist.");
+    }
+
+    /// <summary>
+    /// Ctrl+S in the diagram (016f E3, V22): the page sends the model of that
+    /// moment; it is taken like a change, applied the way "Update
+    /// InstanceHierarchy" applies, and the AML file is saved through the editor.
+    /// </summary>
+    private void OnSaveFromPage(JsonElement data)
+    {
+        if (_disposed || _doc == null || _ih == null) return;
+        OnDiagramChangedFromJs(data);
+        _lastApplyError = null;
+        var outcome = SaveFlow.Run(HasPendingSnapshot, InConflict, ApplyPending, EditorSaver.TrySaveActiveDocument);
+        if (_disposed) return;
+        SetStatus(SaveFlow.StatusText(outcome, _lastApplyError));
+    }
+
+    /// <summary>A text for the status line of this tab from outside (the plugin after a save of the editor).</summary>
+    public void ShowStatus(string text) => SetStatus(text);
+
+    /// <summary>
+    /// Write the pending snapshot of the viewer into the InstanceHierarchy, with
+    /// the questions of "Update InstanceHierarchy" (large change, old snapshot).
+    /// Saving the file is up to the caller. Nothing pending counts as applied.
+    /// </summary>
+    public ApplyResult ApplyPending()
+    {
+        if (_disposed || _doc == null || _ih == null) return ApplyResult.Failed;
+        var snapshot = _pendingSnapshot;
+        if (string.IsNullOrEmpty(snapshot)) return ApplyResult.Applied;
 
         // Suppress live-sync for the ENTIRE operation, confirm dialogs included.
         // MessageBox.Show pumps the dispatcher, so without this the poll timer
@@ -301,14 +353,14 @@ public partial class IhView : UserControl, IDisposable
             // (more adds/removes than the threshold), let the user opt out — protects
             // against phantom-pending snapshots and similar accidents.
             if (_settings.ConfirmLargeUpdates && !ConfirmLargeChangeIfNeeded(snapshot))
-                return;
+                return ApplyResult.Cancelled;
 
             // Stale-snapshot guard: if the pending edit lingered across a long
             // modelling break (e.g. left the editor open over lunch), warn the
             // user before applying it. Same rationale as ConfirmLargeUpdates —
             // narrow the window where forgotten/stale state silently overwrites
             // edits made elsewhere.
-            if (!ConfirmPendingAgeIfNeeded()) return;
+            if (!ConfirmPendingAgeIfNeeded()) return ApplyResult.Cancelled;
 
             // Disable the button + set a busy status so the user gets immediate
             // feedback while UpdateInPlace runs (still synchronous on the UI thread
@@ -339,7 +391,7 @@ public partial class IhView : UserControl, IDisposable
             // A re-entrant ChangeSelectedObject during the mapper call can
             // have disposed this view. Bail out before touching now-null
             // _doc/_ih any further.
-            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-mapper — view disposed during operation."); return; }
+            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-mapper — view disposed during operation."); return ApplyResult.Failed; }
 
             _pendingSnapshot = null;
             _pendingSnapshotTimestamp = DateTime.MinValue;
@@ -355,36 +407,21 @@ public partial class IhView : UserControl, IDisposable
             var swValidator = System.Diagnostics.Stopwatch.StartNew();
             RunVdiValidationIfEnabled();
             swValidator.Stop();
-            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-validator — view disposed."); return; }
+            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-validator — view disposed."); return ApplyResult.Failed; }
 
             var swHash = System.Diagnostics.Stopwatch.StartNew();
             _lastIhHash = ComputeIhHash(_ih);
             swHash.Stop();
 
-            var swSave = System.Diagnostics.Stopwatch.StartNew();
-            var saveAttempted = _settings.AutoSaveAfterUpdate;
-            // EditorSaver may trigger ChangeSelectedObject as a side-effect,
-            // which can dispose this view mid-call. Check after.
-            var saveOk        = saveAttempted && EditorSaver.TrySaveActiveDocument();
-            swSave.Stop();
-            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-save — view disposed (likely by editor's save-side-effect)."); return; }
-
-            if (saveOk)
-                SetStatus("Updated. Editor save command invoked (Ctrl+S still works manually).");
-            else if (saveAttempted)
-                SetStatus("Updated. Auto-save unavailable — press Ctrl+S to persist.");
-            else
-                SetStatus("Updated. Press Ctrl+S to persist.");
-
-            swTotal?.Stop();
+            swTotal.Stop();
             PluginLog.Info($"[{_ihLabel}] Update timings — " +
                 $"mapper:{swMapper.ElapsedMilliseconds}ms " +
                 $"validator:{swValidator.ElapsedMilliseconds}ms " +
                 $"hash:{swHash.ElapsedMilliseconds}ms " +
-                $"save:{swSave.ElapsedMilliseconds}ms " +
-                $"total:{swTotal?.ElapsedMilliseconds ?? 0}ms");
+                $"total:{swTotal.ElapsedMilliseconds}ms");
 
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+            return ApplyResult.Applied;
         }
         catch (Exception ex)
         {
@@ -395,11 +432,13 @@ public partial class IhView : UserControl, IDisposable
             if (_disposed)
             {
                 PluginLog.Debug($"[{_ihLabel}] Update threw after view disposal — suppressing UI dialog. Inner: {ex.Message}");
-                return;
+                return ApplyResult.Failed;
             }
+            _lastApplyError = ex.Message;
             PluginLog.Error($"[{_ihLabel}] Update failed", ex);
             MessageBox.Show($"Updating this InstanceHierarchy failed:\n\n{ex.Message}",
                 "FPB.js Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            return ApplyResult.Failed;
         }
         finally
         {

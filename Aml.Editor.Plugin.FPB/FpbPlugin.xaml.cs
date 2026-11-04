@@ -19,7 +19,7 @@ using Microsoft.Win32;
 
 namespace Aml.Editor.Plugin.FPB;
 
-public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocumentLoad
+public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocumentLoad, INotifyAMLDocumentSaved
 {
     private CAEXDocument? _currentDocument;
     private string? _currentFilePath;
@@ -339,6 +339,22 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
     }
 
     // ── ISupportsThemes ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// The editor saved the document (016f E3, V23). A tab with diagram changes
+    /// that are not applied says that the file was saved without them.
+    /// </summary>
+    public void DocumentSaved(string savedToFile)
+    {
+        foreach (var view in _orderedViews)
+        {
+            try
+            {
+                if (view.HasPendingSnapshot) view.ShowStatus(SaveFlow.SavedWithoutPendingText(view.IhLabel));
+            }
+            catch (Exception ex) { PluginLog.Error("Reporting the save of the editor failed", ex); }
+        }
+    }
 
     public void OnThemeChanged(ApplicationTheme theme)
     {
