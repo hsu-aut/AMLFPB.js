@@ -46,6 +46,9 @@ public partial class IhView : UserControl, IDisposable
     // why the last ApplyPending failed, for the status of Ctrl+S
     private string? _lastApplyError;
 
+    // pending edits restored after a rebuild, shown in the page (final review)
+    private readonly RestoreImport _restore = new();
+
     // the two checks of the findings list (V25)
     private IReadOnlyList<ValidationFinding> _pluginFindings = Array.Empty<ValidationFinding>();
     private IReadOnlyList<PageFinding> _pageFindings = Array.Empty<PageFinding>();
@@ -106,6 +109,9 @@ public partial class IhView : UserControl, IDisposable
         if (string.IsNullOrEmpty(snapshot)) return;
         _pendingSnapshot = snapshot;
         _sync.DiagramChanged(equalsBaseline: false);
+        // the page shows the restored edits too, the AML stays the baseline
+        var importNow = _restore.Restore(snapshot, answeredAlready: _echoBaseline != null);
+        if (importNow != null) _bridge?.ImportJson(importNow);
         // The cache survived a doc switch but we have no original timestamp,
         // so treat the restore moment as the snapshot's age start. Worst case:
         // user gets the stale-snapshot warning slightly later than ideal.
@@ -192,7 +198,10 @@ public partial class IhView : UserControl, IDisposable
             // own export of the just-imported model. Any later 'changed' payload
             // equal to this baseline is import fallout; anything else is a REAL
             // user edit — no timed window that could swallow genuine edits.
-            _echoBaseline = baseline;
+            // Restored edits are imported after the AML and are no baseline.
+            var (useAsBaseline, importNext) = _restore.Answered();
+            if (useAsBaseline) _echoBaseline = baseline;
+            if (importNext != null) _bridge?.ImportJson(importNext);
             PluginLog.Debug($"[{_ihLabel}] import acknowledged by JS " +
                             (baseline != null ? "(echo baseline captured)." : "(no baseline payload — timed fallback stays active)."));
             HideJsErrorBanner();
@@ -722,6 +731,7 @@ public partial class IhView : UserControl, IDisposable
             PluginLog.Debug($"[{_ihLabel}] Refresh: pending={(pending != null ? "discarded" : "none")} hash-before={hashBefore:X8}");
             var backupPath = pending != null ? TryWritePendingBackup(pending) : null;
 
+            _restore.Reset();
             PushIhToWebView();
             _pendingSnapshot = null;
             _pendingSnapshotTimestamp = DateTime.MinValue;
