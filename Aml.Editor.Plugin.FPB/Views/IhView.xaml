@@ -54,7 +54,7 @@
                           Unchecked="ViewOnlyToggle_Changed"
                           ToolTip="View only: look at the diagram, zoom, switch layers and export, but change nothing. Click again to edit.">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE72E;" Foreground="#606060"/>
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE72E;" Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"/>
                     <TextBlock Text="View only" VerticalAlignment="Center"/>
                 </StackPanel>
             </ToggleButton>
@@ -69,7 +69,7 @@
                     Click="ProcessMenuButton_Click"
                     ToolTip="Create, import or export an FPD process.">
                 <StackPanel Orientation="Horizontal">
-                    <TextBlock Style="{StaticResource IconText}" Text="&#xE700;" Foreground="#606060"/>
+                    <TextBlock Style="{StaticResource IconText}" Text="&#xE700;" Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"/>
                     <TextBlock Text="Process &#x25BE;" VerticalAlignment="Center"/>
                 </StackPanel>
                 <Button.ContextMenu>
@@ -94,7 +94,7 @@
             <TextBlock x:Name="StatusLabel"
                        Text=""
                        VerticalAlignment="Center"
-                       Foreground="#666"
+                       Foreground="{DynamicResource MahApps.Brushes.Gray2}"
                        FontStyle="Italic"
                        Margin="6,0"/>
         </ToolBar>
@@ -151,9 +151,9 @@
                     </Grid>
                 </Border>
                 <Border x:Name="JsErrorBanner"
-                        Background="#FFF3CD"
-                        BorderBrush="#FFE69C"
-                        BorderThickness="0,0,0,1"
+                        Background="{DynamicResource MahApps.Brushes.ThemeBackground}"
+                        BorderBrush="{DynamicResource MahApps.Brushes.Accent}"
+                        BorderThickness="0,0,0,2"
                         Padding="12,8"
                         Visibility="Collapsed">
                     <Grid>
@@ -166,14 +166,14 @@
                                    Text="&#xE7BA;"
                                    FontFamily="Segoe MDL2 Assets"
                                    FontSize="16"
-                                   Foreground="#856404"
+                                   Foreground="{DynamicResource MahApps.Brushes.Accent}"
                                    VerticalAlignment="Center"
                                    Margin="0,0,8,0"/>
                         <TextBlock Grid.Column="1"
                                    x:Name="JsErrorMessage"
                                    Text=""
                                    TextWrapping="Wrap"
-                                   Foreground="#856404"
+                                   Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"
                                    VerticalAlignment="Center"/>
                         <Button Grid.Column="2"
                                 x:Name="JsErrorRetryButton"
@@ -190,12 +190,12 @@
             <local:DiagramWebView Grid.Row="1" x:Name="WebView" AllowExternalDrop="False"/>
             <Border Grid.Row="1"
                     x:Name="WebViewPlaceholder"
-                    Background="#F8F8F8"
+                    Background="{DynamicResource MahApps.Brushes.ThemeBackground}"
                     Visibility="Visible">
                 <TextBlock Text="Loading FPB.js viewer…"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           Foreground="#666"
+                           Foreground="{DynamicResource MahApps.Brushes.Gray2}"
                            FontSize="13"/>
             </Border>
         </Grid>
@@ -206,7 +206,7 @@
                       Height="3"
                       HorizontalAlignment="Stretch"
                       VerticalAlignment="Center"
-                      Background="#DDDDDD"
+                      Background="{DynamicResource MahApps.Brushes.Gray7}"
                       ShowsPreview="True"/>
 
         <!-- Findings pane: live VDI 3682 validation results for this IH. Double-
@@ -218,15 +218,15 @@
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0"
-                    Background="#F4F4F4"
-                    BorderBrush="#DDDDDD"
+                    Background="{DynamicResource MahApps.Brushes.Gray10}"
+                    BorderBrush="{DynamicResource MahApps.Brushes.Gray7}"
                     BorderThickness="0,1,0,1"
                     Padding="8,4">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="&#xE721;"
                                FontFamily="Segoe MDL2 Assets"
                                FontSize="13"
-                               Foreground="#666"
+                               Foreground="{DynamicResource MahApps.Brushes.Gray2}"
                                VerticalAlignment="Center"
                                Margin="0,0,6,0"/>
                     <TextBlock Text="VDI 3682 Findings"
@@ -234,7 +234,7 @@
                                VerticalAlignment="Center"/>
                     <TextBlock x:Name="FindingsSummary"
                                Text=" — no findings"
-                               Foreground="#666"
+                               Foreground="{DynamicResource MahApps.Brushes.Gray2}"
                                VerticalAlignment="Center"
                                Margin="6,0,0,0"/>
                 </StackPanel>

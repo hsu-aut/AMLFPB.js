@@ -8,28 +8,28 @@
     mc:Ignorable="d"
     d:DesignHeight="600" d:DesignWidth="900">
 
-    <!-- Make ALL TabItems in this plugin a bit smaller — the editor's skin uses
-         a fairly large default that doesn't sit well in a nested-tab layout. -->
-    <aml:PluginViewBase.Resources>
-        <Style TargetType="TabItem">
-            <Setter Property="FontSize" Value="12"/>
-        </Style>
-    </aml:PluginViewBase.Resources>
+    <!-- The tab headers are a bit smaller than the skin's default, which does
+         not sit well in nested tabs. A header of its own sizes the text and keeps
+         the skin's TabItem style; a Style TargetType="TabItem" without BasedOn
+         replaced that style and broke the dark theme (016f E3, V17). -->
 
     <TabControl>
         <!-- Tab 1: per-IH sub-tabs -->
-        <TabItem Header="FPB.js Viewer">
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="FPB.js Viewer" FontSize="12"/>
+            </TabItem.Header>
             <Grid>
                 <!-- Let the editor's Aml.Skins theme own the appearance — no custom
                      TabControl style here. Tab headers are plain strings so the
                      skin's TabItem template applies cleanly. -->
                 <TabControl x:Name="IhTabs"/>
                 <Border x:Name="NoIhPlaceholder"
-                        Background="#F8F8F8"
+                        Background="{DynamicResource MahApps.Brushes.ThemeBackground}"
                         Visibility="Visible">
                     <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
                         <TextBlock HorizontalAlignment="Center"
-                                   Foreground="#666"
+                                   Foreground="{DynamicResource MahApps.Brushes.Gray2}"
                                    FontSize="13"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap"
@@ -53,7 +53,10 @@
         </TabItem>
 
         <!-- Tab 2: status log + diagnostics controls -->
-        <TabItem Header="Status / Diagnostics">
+        <TabItem>
+            <TabItem.Header>
+                <TextBlock Text="Status / Diagnostics" FontSize="12"/>
+            </TabItem.Header>
             <Grid Margin="8">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -68,8 +71,8 @@
                                VerticalAlignment="Center"/>
                     <Border x:Name="CompatBanner"
                             Visibility="Collapsed"
-                            Background="#FFF3CD"
-                            BorderBrush="#FFE69C"
+                            Background="{DynamicResource MahApps.Brushes.ThemeBackground}"
+                            BorderBrush="{DynamicResource MahApps.Brushes.Accent}"
                             BorderThickness="1"
                             CornerRadius="3"
                             Padding="6,2"
@@ -78,7 +81,7 @@
                         <TextBlock x:Name="CompatBannerText"
                                    Text=""
                                    FontSize="11"
-                                   Foreground="#856404"
+                                   Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"
                                    VerticalAlignment="Center"/>
                     </Border>
                 </StackPanel>
@@ -128,7 +131,7 @@
                                    Text=""
                                    Margin="12,0,0,0"
                                    VerticalAlignment="Center"
-                                   Foreground="#888"
+                                   Foreground="{DynamicResource MahApps.Brushes.Gray2}"
                                    FontSize="11"/>
                     </StackPanel>
                 </StackPanel>
@@ -141,7 +144,7 @@
                          FontFamily="Consolas"
                          FontSize="11"
                          BorderThickness="1"
-                         BorderBrush="#CCC"
+                         BorderBrush="{DynamicResource MahApps.Brushes.Gray7}"
                          Padding="4"
                          Text="Ready. Each FPD InstanceHierarchy in the open AML document gets its own tab in the FPB.js Viewer tab; per-IH Update/Refresh/Export buttons live inside that tab."/>
             </Grid>

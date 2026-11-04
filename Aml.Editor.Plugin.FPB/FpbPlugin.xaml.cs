@@ -83,6 +83,10 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
 
         PluginLog.Init();
         PluginLog.OnLine += OnDiagnosticsLine;
+
+        // An exception of the plugin that no handler caught must not end the
+        // editor (016f E3, T19): it goes to the log and the status line.
+        PluginSafetyNet.Attach(Dispatcher, ReportUnhandled);
         var asmVersion = typeof(FpbPlugin).Assembly.GetName().Version?.ToString(3) ?? "?";
         PluginLog.Info($"Plugin v{asmVersion} constructing. Log file: {PluginLog.FilePath}");
         PluginLog.Debug($"Settings file: {PluginSettings.FilePath} (debug={_settings.DebugLogging})");
@@ -387,6 +391,13 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         DocumentUnLoaded();
     }
 
+    private void ReportUnhandled(Exception ex)
+    {
+        PluginLog.Error("Unhandled exception in the plugin, caught by its safety net", ex);
+        if (IhTabs.SelectedItem is TabItem { Content: IhView view })
+            view.ShowStatus($"Something in the plugin went wrong: {ex.Message} Details are in the log.");
+    }
+
     // ── ISupportsThemes ─────────────────────────────────────────────────
 
     /// <summary>
@@ -519,10 +530,10 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
             view.UseDocumentCommands(_newProcessCommand, _importCommand);
             var tab = new TabItem
             {
-                Header = label,
                 Content = view,
-                FontSize = 12,  // match outer-tab styling override in XAML
+                FontSize = 12,  // the content as before; the header gets its own size below
             };
+            UpdateTabHeader(tab, label, false);
             view.PendingChanged += (v, hasPending) => UpdateTabHeader(tab, v.IhLabel, hasPending);
             // Tab title follows IH.Name changes the user makes in the AML tree —
             // IhView raises LabelChanged after each Convert push when it notices drift.
@@ -599,10 +610,10 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
 
     private static void UpdateTabHeader(TabItem tab, string label, bool hasPending)
     {
-        // Keep the header as a plain string so the editor's Aml.Skins TabItem
-        // template applies its native styling (background, padding, fonts).
-        // Pending state is signalled by a leading bullet glyph in the same colour.
-        tab.Header = hasPending ? "● " + label : label;
+        // A header of its own keeps the editor's Aml.Skins TabItem style and
+        // only sets the size (016f E3, V17). Pending state is signalled by a
+        // leading bullet glyph in the same colour.
+        tab.Header = new TextBlock { Text = hasPending ? "● " + label : label, FontSize = 12 };
     }
 
     private void DisposeAllIhViews()
