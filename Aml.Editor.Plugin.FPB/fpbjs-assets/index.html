@@ -232,7 +232,10 @@
             fpb.setReadOnly(!!message.readOnly);
             break;
           case 'select':
-            if (!fpb.select(message.id, { process: message.processId || undefined, scroll: true })) {
+            // the process itself in the AML tree: only its layer
+            if (message.processId && message.id === message.processId) {
+              fpb.switchProcess(message.processId);
+            } else if (!fpb.select(message.id, { process: message.processId || undefined, scroll: true })) {
               post({ type: 'log', level: 'info', message: 'select: no element ' + message.id + ' on layer ' + message.processId });
             }
             break;

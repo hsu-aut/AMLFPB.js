@@ -51,6 +51,8 @@ public sealed class FpbWebView : IDisposable
     /// <summary>Ctrl+S in the diagram (V22), with the model of that moment.</summary>
     public event Action<JsonElement>? OnSaveRequested;
     public event Action<string?>?    OnProcessSwitched;
+    /// <summary>The selection of the diagram changed (V26): element id and layer, the id null when nothing is selected.</summary>
+    public event Action<string?, string?>? OnSelected;
     public event Action<string,string>? OnJsLog;   // (level, message) — for diagnostics
 
     public FpbWebView(WebView2 view)
@@ -379,6 +381,10 @@ public sealed class FpbWebView : IDisposable
 
             case JsMessageType.ProcessSwitched:
                 OnProcessSwitched?.Invoke(msg.Id);
+                break;
+
+            case JsMessageType.Selected:
+                OnSelected?.Invoke(msg.Id, msg.ProcessId);
                 break;
 
             case JsMessageType.Error:

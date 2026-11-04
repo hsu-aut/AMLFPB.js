@@ -119,6 +119,13 @@ test('select from the host switches the layer and leaves the focus', async ({ pa
   expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
 });
 
+test('selecting a layer itself from the host only switches to it', async ({ page }) => {
+  await openPluginPage(page);
+  await importModel(page);
+  await send(page, { type: 'select', id: CHILD, processId: CHILD });
+  await expect.poll(() => page.evaluate(() => window.fpb.getCurrentProcess())).toBe(CHILD);
+});
+
 test('setTheme dark darkens the page and hides the light and dark button', async ({ page }) => {
   await openPluginPage(page);
   await importModel(page);

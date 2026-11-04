@@ -19,7 +19,7 @@ using Microsoft.Win32;
 
 namespace Aml.Editor.Plugin.FPB;
 
-public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocumentLoad, INotifyAMLDocumentSaved
+public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocumentLoad, INotifyAMLDocumentSaved, ISupportsSelection
 {
     private CAEXDocument? _currentDocument;
     private string? _currentFilePath;
@@ -199,6 +199,53 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         _currentFilePath = amlFilePath;
     }
 
+    /// <summary>
+    /// The plugin selects in the AML tree what was selected in the diagram
+    /// (016f E3, V26). The editor applies it without reporting it back through
+    /// ChangeSelectedObject.
+    /// </summary>
+    public event EventHandler<SelectionEventArgs>? Selected;
+
+    // the object selected last, from either side: a selection that only goes
+    // back to where it came from is not passed on again
+    private string? _editorSelection;
+
+    private void OnElementSelectedInDiagram(IhView view, CAEXObject selected)
+    {
+        if (string.Equals(selected.ID, _editorSelection, StringComparison.OrdinalIgnoreCase)) return;
+        _editorSelection = selected.ID;
+        try
+        {
+            Selected?.Invoke(this, new ExtendedSelectionEventArgs(selected) { Select = true, Expand = true });
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error("Selecting in the AML tree failed", ex);
+            return;
+        }
+        // the editor focuses the plugin after a selection; the keys belong to the diagram
+        Dispatcher.BeginInvoke(new Action(view.FocusDiagram), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>
+    /// Show in the diagram what was selected in the AML tree (V26): the tab of
+    /// its InstanceHierarchy, and the element on its layer.
+    /// </summary>
+    private void FollowEditorSelection(CAEXBasicObject selectedObject)
+    {
+        InstanceHierarchyType? ih = null;
+        for (var o = selectedObject; o != null; o = o.CAEXParent as CAEXBasicObject)
+            if (o is InstanceHierarchyType found) { ih = found; break; }
+        if (ih == null) return;
+        var view = _orderedViews.FirstOrDefault(v => v.Ih != null && string.Equals(v.Ih.ID, ih.ID, StringComparison.OrdinalIgnoreCase));
+        if (view == null) return;
+        var tab = IhTabs.Items.OfType<TabItem>().FirstOrDefault(t => ReferenceEquals(t.Content, view));
+        if (tab != null && !ReferenceEquals(IhTabs.SelectedItem, tab)) IhTabs.SelectedItem = tab;
+        if (selectedObject is InstanceHierarchyType) return;
+        var shown = view.SelectFromEditor(selectedObject);
+        if (shown != null) _editorSelection = shown;
+    }
+
     public override void ChangeSelectedObject(CAEXBasicObject selectedObject)
     {
         base.ChangeSelectedObject(selectedObject);
@@ -221,6 +268,8 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         else if (doc != null)
         {
             _currentDocument = doc;
+            try { if (selectedObject != null) FollowEditorSelection(selectedObject); }
+            catch (Exception ex) { PluginLog.Error("Following the selection of the AML tree failed", ex); }
         }
         // Selection cleared (doc == null) leaves _currentDocument alone — see audit P0 #4.
     }
@@ -479,6 +528,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
             // IhView raises LabelChanged after each Convert push when it notices drift.
             view.LabelChanged += (v, newLabel) => UpdateTabHeader(tab, newLabel, v.HasPendingSnapshot);
             view.ViewOnlyChanged += (_, viewOnly) => SetViewOnly(viewOnly);
+            view.ElementSelected += OnElementSelectedInDiagram;
 
             IhTabs.Items.Add(tab);
             _orderedViews.Add(view);

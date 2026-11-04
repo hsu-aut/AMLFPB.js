@@ -65,6 +65,16 @@ public partial class IhView : UserControl, IDisposable
     /// <summary>Raised when the IH's display name drifts (host updates the tab header text).</summary>
     public event Action<IhView, string>? LabelChanged;
 
+    /// <summary>
+    /// Raised when an element is selected in the diagram that has an object in
+    /// the InstanceHierarchy (016f E3, V26); the plugin selects it in the AML tree.
+    /// </summary>
+    public event Action<IhView, CAEXObject>? ElementSelected;
+
+    // which object is which element on which layer (V26), rebuilt with every
+    // load and every apply
+    private FpdElementIndex _index = FpdElementIndex.Empty;
+
     /// <summary>Raised when the user switches View only in this tab (the host applies it to all tabs and remembers it).</summary>
     public event Action<IhView, bool>? ViewOnlyChanged;
 
@@ -160,6 +170,7 @@ public partial class IhView : UserControl, IDisposable
         };
         _bridge.OnDiagramChanged += OnDiagramChangedFromJs;
         _bridge.OnSaveRequested += OnSaveFromPage;
+        _bridge.OnSelected += OnSelectedInDiagram;
         _bridge.OnImported += baseline =>
         {
             // Content-based echo detection (P0-8): the ack carries the viewer's
@@ -240,6 +251,7 @@ public partial class IhView : UserControl, IDisposable
         try
         {
             var result = CaexToFpbJson.Convert(_doc, _ih);
+            _index = FpdElementIndex.Build(_ih);
             // Stamp AFTER ImportJson returns successfully, not before. If
             // ImportJson silently short-circuits (bridge not ready,
             // CoreWebView2 null) or PostWebMessageAsJson throws, a pre-stamp
@@ -329,6 +341,62 @@ public partial class IhView : UserControl, IDisposable
         SetStatus(SaveFlow.StatusText(outcome, _lastApplyError));
     }
 
+    // ── Selection between the AML tree and the diagram (V26) ──────────────
+
+    /// <summary>
+    /// Show in the diagram what was selected in the AML tree: the nearest object
+    /// upwards that the diagram has (an interface or attribute selects its
+    /// element). Returns the id of that object, or null when the diagram has none.
+    /// </summary>
+    public string? SelectFromEditor(CAEXBasicObject selected)
+    {
+        if (_disposed || _bridge == null) return null;
+        for (var o = selected; o != null; o = o.CAEXParent as CAEXBasicObject)
+        {
+            if (o is InstanceHierarchyType) return null;
+            if (o is CAEXObject withId && _index.TryGetFpb(withId.ID, out var fpbId, out var processId))
+            {
+                _bridge.Select(fpbId, processId);
+                return withId.ID;
+            }
+        }
+        return null;
+    }
+
+    private void OnSelectedInDiagram(string? id, string? processId)
+    {
+        if (_disposed || _ih == null || string.IsNullOrEmpty(id) || string.IsNullOrEmpty(processId)) return;
+        var objectId = _index.IeIdFor(id, processId);
+        // drawn after the last apply: no object in the tree yet
+        if (objectId == null) return;
+        var found = FindObject(objectId);
+        if (found == null) return;
+        try { ElementSelected?.Invoke(this, found); }
+        catch (Exception ex) { PluginLog.Error("ElementSelected handler threw", ex); }
+    }
+
+    /// <summary>The InternalElement or InternalLink of the InstanceHierarchy with this id (without braces).</summary>
+    private CAEXObject? FindObject(string bareId)
+    {
+        if (_ih == null) return null;
+        static bool Same(string? id, string bare) => string.Equals((id ?? "").Trim('{', '}'), bare, StringComparison.OrdinalIgnoreCase);
+        foreach (var process in _ih.InternalElement)
+        {
+            if (Same(process.ID, bareId)) return process;
+            foreach (var ie in process.InternalElement)
+                if (Same(ie.ID, bareId)) return ie;
+            foreach (var link in process.InternalLink)
+                if (Same(link.ID, bareId)) return link;
+        }
+        return null;
+    }
+
+    /// <summary>Give the keyboard back to the diagram (the editor focuses the plugin after a selection).</summary>
+    public void FocusDiagram()
+    {
+        if (!_disposed) WebView?.Focus();
+    }
+
     /// <summary>A text for the status line of this tab from outside (the plugin after a save of the editor).</summary>
     public void ShowStatus(string text) => SetStatus(text);
 
@@ -402,6 +470,7 @@ public partial class IhView : UserControl, IDisposable
             OnPendingStateChanged();
             _sync.Applied();
             UpdateConflictBar();
+            _index = FpdElementIndex.Build(_ih);
             // Re-anchor the echo baseline on the state we just wrote into the
             // document. Viewer == document == baseline now; a later undo back
             // to the PRE-update state differs from this baseline and correctly
