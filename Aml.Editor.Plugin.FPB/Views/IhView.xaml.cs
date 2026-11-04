@@ -164,7 +164,8 @@ public partial class IhView : UserControl, IDisposable
         _bridge.OnJsLog += (lvl, msg) => PluginLog.FromJs(lvl, $"[{_ihLabel}] {msg}");
         ApplyViewOnly(settings.ViewOnly);
 
-        try { await _bridge.InitAsync(); }
+        // DevTools and the browser's context menu only for "Verbose debug logging" (V16)
+        try { await _bridge.InitAsync(settings.DebugLogging); }
         catch (Exception ex) { PluginLog.Error($"[{_ihLabel}] WebView2 init failed", ex); }
 
         StartLiveSync();
@@ -852,7 +853,7 @@ public partial class IhView : UserControl, IDisposable
 
     /// <summary>
     /// Double-click on a finding asks the viewer to focus the corresponding
-    /// element. Bridge.SelectElement no-ops gracefully when the id is unknown
+    /// element. Bridge.Select no-ops gracefully when the id is unknown
     /// to the JS side (e.g. a project-level finding without an element id).
     /// </summary>
     private void FindingsGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
@@ -860,7 +861,7 @@ public partial class IhView : UserControl, IDisposable
         if (_disposed || _bridge == null) return;
         if (FindingsGrid.SelectedItem is not FindingRow row) return;
         if (string.IsNullOrEmpty(row.ElementId)) return;
-        _bridge.SelectElement(row.ElementId);
+        _bridge.Select(row.ElementId, null);
     }
 
     private static ValidationOptions BuildValidationOptions(PluginSettings settings)

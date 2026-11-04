@@ -17,8 +17,27 @@ public class BridgeMessageTests
     }
 
     [Fact]
-    public void SelectElementCarriesTheId()
+    public void SelectCarriesTheIdAndTheLayer()
     {
-        Assert.Equal("{\"type\":\"selectElement\",\"id\":\"po_1\"}", JsonSerializer.Serialize(SelectElementMessage.For("po_1")));
+        Assert.Equal("{\"type\":\"select\",\"id\":\"po_1\",\"processId\":\"p_1\"}", JsonSerializer.Serialize(SelectMessage.For("po_1", "p_1")));
+    }
+
+    [Fact]
+    public void SelectWithoutLayerCarriesNull()
+    {
+        Assert.Equal("{\"type\":\"select\",\"id\":\"po_1\",\"processId\":null}", JsonSerializer.Serialize(SelectMessage.For("po_1", null)));
+    }
+
+    [Fact]
+    public void SetValidationMarkersCarriesTheFlag()
+    {
+        Assert.Equal("{\"type\":\"setValidationMarkers\",\"show\":false}", JsonSerializer.Serialize(SetValidationMarkersMessage.For(false)));
+    }
+
+    [Fact]
+    public void ImportJsonCarriesItsNumberAndTheModel()
+    {
+        using var model = JsonDocument.Parse("[1]");
+        Assert.Equal("{\"type\":\"importJSON\",\"seq\":3,\"data\":[1]}", JsonSerializer.Serialize(ImportJsonMessage.For(3, model.RootElement)));
     }
 }

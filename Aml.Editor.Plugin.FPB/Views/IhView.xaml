@@ -99,7 +99,8 @@
         </ToolBar>
 
         <Grid Grid.Row="1">
-            <wv2:WebView2 x:Name="WebView"/>
+            <!-- a file dropped on the diagram opens nothing (V14) -->
+            <wv2:WebView2 x:Name="WebView" AllowExternalDrop="False"/>
             <Border x:Name="WebViewPlaceholder"
                     Background="#F8F8F8"
                     Visibility="Visible">
