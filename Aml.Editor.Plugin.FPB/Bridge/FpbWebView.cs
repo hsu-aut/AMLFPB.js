@@ -345,17 +345,23 @@ public sealed class FpbWebView : IDisposable
     public event Action<string?>? OnImported;
 
     // ─── Internal: handle JS → host messages ─────────────────────────────────────
-    private void OnWebMessage(CoreWebView2WebMessageReceivedEventArgs e)
+    private void OnWebMessage(CoreWebView2WebMessageReceivedEventArgs e) => ReceiveMessage(e.Source, e.WebMessageAsJson);
+
+    /// <summary>
+    /// A message of the page, as WebView2 delivers it (source and JSON). The
+    /// entry point of <c>WebMessageReceived</c>, public for the tests.
+    /// </summary>
+    public void ReceiveMessage(string? source, string json)
     {
         if (_disposed) return;
         // V15: only the plugin page may talk to the plugin
-        if (!BridgePolicy.IsOwnSource(e.Source))
+        if (!BridgePolicy.IsOwnSource(source))
         {
-            PluginLog.Warn($"Message from a foreign source dropped: {e.Source}");
+            PluginLog.Warn($"Message from a foreign source dropped: {source}");
             return;
         }
         JsToHostMessage? msg;
-        try { msg = JsonSerializer.Deserialize<JsToHostMessage>(e.WebMessageAsJson); }
+        try { msg = JsonSerializer.Deserialize<JsToHostMessage>(json); }
         catch (Exception ex) { ReportError("Failed to parse JS message: " + ex.Message); return; }
         if (msg is null) return;
 
@@ -375,11 +381,16 @@ public sealed class FpbWebView : IDisposable
                 OnDiagramChanged?.Invoke(msg.Data);
                 break;
 
+            // Save, the selection and the findings lead to dialogs (the questions
+            // before applying, the editor's save) and into the editor: they run
+            // after this WebView2 event, which does not support nested message
+            // loops (final review of 016f E3).
             case JsMessageType.Save:
                 if (msg.Data.ValueKind == JsonValueKind.Undefined
                     || msg.Data.ValueKind == JsonValueKind.Null)
                     break;
-                OnSaveRequested?.Invoke(msg.Data);
+                var model = msg.Data;
+                Later(() => OnSaveRequested?.Invoke(model));
                 break;
 
             case JsMessageType.ProcessSwitched:
@@ -387,11 +398,13 @@ public sealed class FpbWebView : IDisposable
                 break;
 
             case JsMessageType.Selected:
-                OnSelected?.Invoke(msg.Id, msg.ProcessId);
+                var (id, processId) = (msg.Id, msg.ProcessId);
+                Later(() => OnSelected?.Invoke(id, processId));
                 break;
 
             case JsMessageType.Findings:
-                OnFindings?.Invoke(ReadFindings(msg.Items), ReadStrings(msg.Rules));
+                var (findings, rules) = (ReadFindings(msg.Items), ReadStrings(msg.Rules));
+                Later(() => OnFindings?.Invoke(findings, rules));
                 break;
 
             case JsMessageType.Error:
@@ -424,6 +437,9 @@ public sealed class FpbWebView : IDisposable
                 break;
         }
     }
+
+    private void Later(Action action) =>
+        _view.Dispatcher.BeginInvoke(new Action(() => { if (!_disposed) action(); }));
 
     private static IReadOnlyList<PageFinding> ReadFindings(JsonElement items)
     {
