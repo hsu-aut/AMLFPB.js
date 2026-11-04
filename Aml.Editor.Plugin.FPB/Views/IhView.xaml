@@ -20,7 +20,19 @@
         <!-- Local toolbar: compact icon buttons matching the editor's native side
              panels (Segoe MDL2 Assets glyphs in coloured boxes, mouse-over reveals
              the action label via tooltip). -->
-        <ToolBar Grid.Row="0">
+        <!-- The status has a line of its own below the toolbar: in the editor's
+             narrow pane the ToolBar put it into its overflow, where nobody saw it
+             (016f E3, run in the real editor). -->
+        <DockPanel Grid.Row="0">
+        <TextBlock x:Name="StatusLabel"
+                   DockPanel.Dock="Bottom"
+                   Text=""
+                   Foreground="{DynamicResource MahApps.Brushes.Gray2}"
+                   FontStyle="Italic"
+                   TextTrimming="CharacterEllipsis"
+                   ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"
+                   Margin="8,0,8,3"/>
+        <ToolBar>
             <ToolBar.Resources>
                 <Style x:Key="IconText" TargetType="TextBlock">
                     <Setter Property="FontFamily" Value="Segoe MDL2 Assets"/>
@@ -90,14 +102,8 @@
                     </ContextMenu>
                 </Button.ContextMenu>
             </Button>
-            <Separator/>
-            <TextBlock x:Name="StatusLabel"
-                       Text=""
-                       VerticalAlignment="Center"
-                       Foreground="{DynamicResource MahApps.Brushes.Gray2}"
-                       FontStyle="Italic"
-                       Margin="6,0"/>
         </ToolBar>
+        </DockPanel>
 
         <Grid Grid.Row="1">
             <Grid.RowDefinitions>

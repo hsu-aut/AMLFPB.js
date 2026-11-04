@@ -9,27 +9,29 @@ namespace Aml.Editor.Plugin.FPB.Tests;
 
 public class IhViewTests
 {
-    private static void RunSta(Action action)
-    {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            try { action(); }
-            catch (Exception ex) { failure = ex; }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (failure != null) throw new Exception("failed on the STA thread", failure);
-    }
-
     [Fact]
     public void TheTabViewBuilds()
     {
-        RunSta(() =>
+        Sta.Run(() =>
         {
             using var view = new IhView();
             Assert.False(view.AcceptsDroppedFiles);
+        });
+    }
+
+    // run in the real editor (016f E3): in the narrow pane the WPF ToolBar put
+    // the status into its overflow, where nobody saw "Applied and saved." or
+    // the hint after the editor's save
+    [Fact]
+    public void TheStatusIsNotInsideTheToolBar()
+    {
+        Sta.Run(() =>
+        {
+            using var view = new IhView();
+            var status = (System.Windows.FrameworkElement)view.FindName("StatusLabel");
+            Assert.NotNull(status);
+            for (System.Windows.DependencyObject? o = status; o != null; o = System.Windows.LogicalTreeHelper.GetParent(o))
+                Assert.IsNotType<System.Windows.Controls.ToolBar>(o);
         });
     }
 }
