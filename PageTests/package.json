@@ -1,0 +1,11 @@
+{
+  "name": "amlfpbjs-page-tests",
+  "private": true,
+  "description": "Tests of the plugin page fpbjs-assets/index.html with a stand-in for the WebView2 bridge",
+  "scripts": {
+    "test": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

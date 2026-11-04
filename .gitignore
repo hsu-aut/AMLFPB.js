@@ -42,3 +42,7 @@ Aml.Editor.Plugin.FPB.zip
 TestResults/
 coverage/
 *.coverage
+
+# Page tests (PageTests/)
+PageTests/test-results/
+PageTests/playwright-report/

@@ -2,71 +2,57 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>FPB.JS — AML Editor Plugin</title>
-  <!-- Bootstrap (required by react-bootstrap powered Properties + Layer panels) -->
-  <link rel="stylesheet" href="./vendor/bootstrap.min.css">
-  <!-- diagram-js + FPB.JS styles -->
+  <title>FPB.js in the AutomationML Editor</title>
+  <!-- diagram-js and FPB.js styles; since 2.0 FPB.js needs neither React nor Bootstrap -->
   <link rel="stylesheet" href="./css/diagram-js.css">
   <link rel="stylesheet" href="./css/fpbjs.css">
   <link rel="stylesheet" href="./css/dark-mode.css">
   <style>
-    html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; font-family: sans-serif; background: #fff; }
-
+    /* the layout of the web app (FPB.JS/app/index.html), without the rules
+       for touch screens and sheets */
+    html, body { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
     .fpb-wrapper {
       height: 100%;
       width: 100%;
       display: grid;
-      grid-template-rows: 1fr;
-      overflow: hidden;
+      grid-template-rows: minmax(0, 1fr);
     }
     .modeler-parent {
       display: grid;
-      /* Side panels auto-size so their internal collapse buttons can shrink them. */
-      grid-template-columns: minmax(0,1fr) auto auto;
-      width: 100%;
-      height: 100%;
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-rows: minmax(0, 1fr);
+      position: relative;
       min-height: 0;
-      overflow: hidden;
     }
     #modeler-container {
-      width: 100%;
-      height: 100%;
       min-width: 0;
       min-height: 0;
-      overflow: hidden;
       position: relative;
     }
-    /* diagram-js spawns .djs-container inside #modeler-container — pin it so the
-       SVG actually fills the viewport even if Bootstrap resets touch it. */
-    #modeler-container > .djs-container {
-      width: 100%;
-      height: 100%;
+    .side-panels {
       display: flex;
-      flex-direction: column;
-    }
-    #modeler-container > .djs-container > svg {
-      width: 100%;
-      height: 100%;
-    }
-    #properties-container, #layer-container {
-      /* Width is controlled by the panel's own content (allows the
-         angles-right/left collapse button inside the panel to actually shrink it). */
-      height: 100%;
-      min-width: 0;
-      max-width: 320px;
       min-height: 0;
-      overflow: auto;
-      overflow-wrap: break-word;
-      border-left: 1px solid #CCC;
-      background: #FAFAFA;
-      padding: 5px;
+    }
+    /* the editor gives the plugin a narrow area (about 535 CSS pixels at
+       200 % scaling): the open panel leaves the diagram at least half */
+    #properties-container {
+      max-width: 50vw;
+      min-width: 0;
       box-sizing: border-box;
     }
-
+    #properties-container,
+    #layer-container {
+      border-left: solid 1px #CCC;
+      background: #FAFAFA;
+      padding: 5px;
+      overflow: auto;
+    }
     #boot-error {
-      position: fixed; inset: 0;
+      position: fixed;
+      inset: 0;
       display: none;
-      align-items: center; justify-content: center;
+      align-items: center;
+      justify-content: center;
       background: #fff;
       color: #b00;
       font-family: Consolas, monospace;
@@ -81,250 +67,184 @@
   <div class="fpb-wrapper">
     <div class="modeler-parent">
       <div id="modeler-container"></div>
-      <div id="properties-container"></div>
-      <div id="layer-container"></div>
+      <div class="side-panels">
+        <div id="properties-container"></div>
+        <div id="layer-container"></div>
+      </div>
     </div>
   </div>
   <div id="boot-error"></div>
 
-  <!-- Resolve bare specifiers used by fpbjs.esm.js — React + React-DOM are peer deps. -->
-  <script type="importmap">
-  {
-    "imports": {
-      "react": "./vendor/react.js",
-      "react-dom": "./vendor/react-dom.js"
-    }
-  }
-  </script>
-
   <script type="module">
-    // ── Capture the *original* console.* before we patch it, so the forwarder's
-    //    own try/catch path can log without recursing. ──────────────────────────
+    // The page of the plugin AMLFPB.js (016f E3). It talks to the plugin over
+    // the WebView2 bridge; the messages are listed in
+    // FPB.JS_Docs/Geplante-Features/Plaene/2026-11-05-016f-E3-Plugin.md.
+    // The AML document belongs to the editor: FPB.js gets the model as JSON
+    // and loads no AML module of its own.
+
+    // the console before it is forwarded, so the forwarder can log itself
     const nativeConsole = {
-      log:   console.log.bind(console),
-      info:  console.info.bind(console),
-      warn:  console.warn.bind(console),
+      log: console.log.bind(console),
+      info: console.info.bind(console),
+      warn: console.warn.bind(console),
       error: console.error.bind(console),
-      debug: console.debug?.bind(console) ?? console.log.bind(console),
+      debug: (console.debug || console.log).bind(console)
     };
 
-    const post = (msg) => {
-      try { window.chrome?.webview?.postMessage(msg); }
-      catch (e) { nativeConsole.error('postMessage failed', e); }
+    const post = (message) => {
+      try {
+        window.chrome.webview.postMessage(message);
+      } catch (e) {
+        nativeConsole.error('postMessage failed', e);
+      }
     };
 
-    // ── Diagnostics bridge: every console.* + window.error + unhandledrejection
-    //    is forwarded to the host PluginLog. The host gates LOG/DEBUG behind the
-    //    "Verbose debug logging" checkbox; WARN/ERROR always pass.
+    // every console line, window error and unhandled rejection goes to the
+    // log of the plugin; the plugin shows LOG and DEBUG only with "Verbose
+    // debug logging"
     const formatArg = (a) => {
       if (a == null) return String(a);
       if (a instanceof Error) return a.stack || (a.name + ': ' + a.message);
       if (typeof a === 'string') return a;
       try { return JSON.stringify(a); } catch (_) { return String(a); }
     };
-    const installConsoleForwarder = () => {
-      const levels = ['log', 'info', 'warn', 'error', 'debug'];
-      for (const lvl of levels) {
-        console[lvl] = (...args) => {
-          try { post({ type: 'log', level: lvl, message: args.map(formatArg).join(' ') }); }
-          catch (_) { /* never let logging break the page */ }
-          try { nativeConsole[lvl](...args); } catch (_) {}
-        };
-      }
-    };
-    installConsoleForwarder();
+    for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
+      console[level] = (...args) => {
+        try { post({ type: 'log', level, message: args.map(formatArg).join(' ') }); } catch (_) { /* never break the page */ }
+        try { nativeConsole[level](...args); } catch (_) { /* nothing */ }
+      };
+    }
     window.addEventListener('error', (e) => {
-      post({ type: 'log', level: 'error',
-             message: 'window.error: ' + (e.error?.stack || e.message || String(e)) });
+      post({ type: 'log', level: 'error', message: 'window.error: ' + ((e.error && e.error.stack) || e.message || String(e)) });
     });
     window.addEventListener('unhandledrejection', (e) => {
-      post({ type: 'log', level: 'error',
-             message: 'unhandledRejection: ' + (e.reason?.stack || e.reason || '(no reason)') });
+      post({ type: 'log', level: 'error', message: 'unhandledRejection: ' + ((e.reason && e.reason.stack) || e.reason || '(no reason)') });
     });
 
     const showFatal = (text) => {
-      try {
-        const el = document.getElementById('boot-error');
-        if (el) {
-          el.textContent = text;
-          el.style.display = 'flex';
-        }
-      } catch (_) {}
+      const element = document.getElementById('boot-error');
+      if (element) {
+        element.textContent = text;
+        element.style.display = 'flex';
+      }
       post({ type: 'error', message: text });
     };
 
-    // FPB.JS internals look up document.documentElement[data-theme] for styling.
-    if (!document.documentElement.getAttribute('data-theme')) {
-      document.documentElement.setAttribute('data-theme', 'light');
-    }
-
     let fpb;
     try {
-      const mod = await import('./fpbjs.esm.js');
-      const create = mod.createFpbModeler ?? mod.default;
-      if (typeof create !== 'function') {
-        throw new Error('createFpbModeler not exported from fpbjs.esm.js');
-      }
-      fpb = await create({
+      const { createFpbModeler } = await import('./fpbjs.esm.js');
+      fpb = await createFpbModeler({
         container: document.getElementById('modeler-container'),
         propertiesContainer: document.getElementById('properties-container'),
         layerContainer: document.getElementById('layer-container'),
+        // the editor opens and saves the document
+        files: false,
+        startCard: false,
+        // the findings stand in the list of the plugin
+        validation: { list: false }
       });
-
-      // FPB.JS internals (e.g. context-pad command handlers) reference
-      // `window.fpbjs` as the live modeler instance. Mirror what dist/web/app.js does.
-      window.fpbjs = fpb.modeler;
+      // for the DevTools and the page tests
+      window.fpb = fpb;
     } catch (err) {
-      showFatal('FPB.JS failed to load:\n' + (err?.stack || err));
+      showFatal('FPB.js failed to load:\n' + ((err && err.stack) || err));
       throw err;
     }
 
-    // ── Cycle-breaking replacer ───────────────────────────────────────────
-    // fpb.toJSON() returns the live diagram-js business-object graph: states
-    // reference POs and POs reference back via isAssignedTo etc. JSON.stringify
-    // refuses cycles, so we walk the structure via the replacer and substitute
-    // object refs with their IDs at the known relationship properties. Same
-    // logic the standalone Web-App uses in DownloadModal.js — local copy here
-    // so the Plugin does not depend on internal FPB.JS structure.
-    const extractId = (item) => {
-      if (typeof item === 'string') return item;
-      if (!item) return item;
-      return item.id || item.uniqueIdent || item.$id || item;
-    };
-    const sanitiseReplacer = (name, val) => {
-      switch (name) {
-        case 'entryPoint':
-          return extractId(val);
-        case 'elementsContainer':
-        case 'consistsOfStates':
-        case 'consistsOfProcessOperator':
-        case 'consistsOfProcesses':
-        case 'inTandemWith':
-        case 'isAssignedTo':
-        case 'incoming':
-        case 'outgoing':
-          return Array.isArray(val) ? val.map(extractId) : extractId(val);
-        case 'sourceRef':
-        case 'targetRef':
-        case 'decomposedView':
-        case 'parent':
-        case 'consistsOfSystemLimit':
-          return extractId(val);
-        case 'isDecomposedProcessOperator':
-          if (val === null || val === undefined) return null;
-          return extractId(val);
-        case 'di':
-        case 'children':
-        case 'labels':
-        case 'ProjectAssignment':
-        case 'TemporaryFlowHint':
-          return undefined;
-        default:
-          return val;
-      }
-    };
-    const safeSnapshot = () => {
+    // the theme of the editor reaches the whole page, not only the containers
+    fpb.on('theme.changed', (e) => {
+      document.documentElement.setAttribute('data-theme', e.theme);
+    });
+
+    const snapshot = () => {
       try {
-        return JSON.parse(JSON.stringify(fpb.toJSON(), sanitiseReplacer));
+        return fpb.toJSON();
       } catch (e) {
-        post({ type: 'error', message: 'snapshot failed: ' + (e?.stack || e) });
+        post({ type: 'error', message: 'snapshot failed: ' + ((e && e.stack) || e) });
         return null;
       }
     };
 
-    // Phase 2.3 wiring: on every diagram change, push a cycle-broken snapshot to
-    // the host. Suppress the inner echo: while fpb.importJSON is running it fires
-    // a barrage of 'changed' events that are NOT user edits.
+    // An import runs from importJSON to import.done. The answer waits one
+    // task, so of two imports sent in a row only the newer one is answered.
+    // FPB.js fires import.done for every import, also for one that a newer
+    // import overtook; each number is answered once.
     let importing = false;
+    let latestSeq = 0;
+    let answeredSeq = 0;
+    fpb.on('import.done', () => {
+      const seq = latestSeq;
+      setTimeout(() => {
+        if (seq !== latestSeq || seq === answeredSeq) return;
+        answeredSeq = seq;
+        importing = false;
+        post({ type: 'imported', seq, data: snapshot() });
+      }, 0);
+    });
+    fpb.on('import.error', (e) => {
+      importing = false;
+      post({ type: 'error', message: 'import failed: ' + ((e && (e.details || e.message)) || '') });
+    });
+
     fpb.on('changed', () => {
       if (importing) return;
-      const snap = safeSnapshot();
-      if (snap !== null) post({ type: 'changed', data: snap });
+      const data = snapshot();
+      if (data !== null) post({ type: 'changed', data });
     });
+
     fpb.on('process.switched', (e) => {
-      post({ type: 'processSwitched', id: e?.selectedProcess?.id ?? null });
+      post({ type: 'processSwitched', id: (e && e.selectedProcess && e.selectedProcess.id) || null });
+    });
+
+    fpb.on('selection.changed', (e) => {
+      const selected = (e && e.newSelection) || [];
+      const last = selected[selected.length - 1];
+      post({ type: 'selected', id: last ? last.id : null, processId: fpb.getCurrentProcess() });
+    });
+
+    fpb.on('fpbValidation.changed', () => {
+      post({ type: 'findings', rules: fpb.getCheckedRules(), items: fpb.getFindings() });
+    });
+
+    // Ctrl+S saves through the editor. A field of the properties panel has
+    // written what was typed before this listener runs (bubbling phase).
+    window.addEventListener('keydown', (event) => {
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && (event.key === 's' || event.key === 'S')) {
+        event.preventDefault();
+        const data = snapshot();
+        if (data !== null) post({ type: 'save', data });
+      }
     });
 
     window.chrome.webview.addEventListener('message', (e) => {
-      const msg = e.data;
-      if (!msg || typeof msg !== 'object') return;
+      const message = e.data;
+      if (!message || typeof message !== 'object') return;
       try {
-        if (msg.type === 'importJSON') {
-          // Reset previously-imported state so the new import REPLACES rather
-          // than accumulates. Without this, every IH-rename (or repeated push
-          // via live-sync) stacks another project under the Layer panel.
-          // Clear _processes/_project FIRST, then attempt the
-          // diagram-js clear(). If clear() throws (corrupted state, partial
-          // dispose), the manual resets still happened — previously they
-          // were positioned after clear() and got skipped on exception,
-          // leaving stale accumulators that re-introduced the LayerPanel
-          // duplicate bug.
-          if (fpb.modeler) {
-            try { fpb.modeler._processes = []; } catch (_) {}
-            try { fpb.modeler._project = null; } catch (_) {}
-            try {
-              if (typeof fpb.modeler.clear === 'function') fpb.modeler.clear();
-            } catch (e) {
-              post({ type: 'log', level: 'warn', message: 'fpb.modeler.clear() threw: ' + (e && e.stack || e) });
+        switch (message.type) {
+          case 'importJSON':
+            latestSeq = message.seq;
+            importing = true;
+            fpb.importJSON(message.data);
+            break;
+          case 'setTheme':
+            fpb.setTheme(message.theme === 'dark' ? 'dark' : 'light');
+            break;
+          case 'setReadOnly':
+            fpb.setReadOnly(!!message.readOnly);
+            break;
+          case 'select':
+            if (!fpb.select(message.id, { process: message.processId || undefined, scroll: true })) {
+              post({ type: 'log', level: 'info', message: 'select: no element ' + message.id + ' on layer ' + message.processId });
             }
-          }
-
-          importing = true;
-          try { fpb.importJSON(msg.data); }
-          catch (e) { post({ type: 'error', message: 'importJSON threw: ' + (e?.stack || e) }); }
-          // Hold the suppression flag through two animation frames so the diagram-js
-          // layout-settling 'changed' events (which fire asynchronously after import)
-          // are still caught — otherwise the plugin sees them as fresh user edits
-          // immediately after load.
-          //
-          // rAF is PAUSED by WebView2 while the tab content is hidden (a non-active
-          // sub-tab, or a collapsed plugin panel). An import that lands then would
-          // leave `importing` stuck true forever, silently swallowing every later
-          // user edit until the tab becomes visible again. The setTimeout is a
-          // fallback that still fires (throttled) when hidden; a guard makes sure
-          // only the first of the two paths resets and posts 'imported'.
-          let settled = false;
-          const settle = () => {
-            if (settled) return;
-            settled = true;
-            importing = false;
-            // Ship our OWN export of the just-imported model with the ack —
-            // the host stores it as the echo baseline: a later 'changed'
-            // payload equal to this is import fallout, anything else is a
-            // real user edit. Content-based, so no timed window can swallow
-            // genuine edits anymore.
-            post({ type: 'imported', data: safeSnapshot() });
-          };
-          requestAnimationFrame(() => requestAnimationFrame(settle));
-          setTimeout(settle, 1000);
-        } else if (msg.type === 'setTheme') {
-          // P11: editor theme follows here. Mirror what app/app.js does at boot.
-          const t = (msg.theme === 'dark') ? 'dark' : 'light';
-          document.documentElement.setAttribute('data-theme', t);
-          try { localStorage.setItem('fpb-theme', t); } catch (_) { /* sandbox */ }
-        } else if (msg.type === 'setReadOnly') {
-          // View only: FPB.js keeps zoom, layers, search and export, and takes
-          // no edits. Older FPB.js builds do not have it.
-          if (typeof fpb.setReadOnly === 'function') {
-            fpb.setReadOnly(!!msg.readOnly);
-          } else if (msg.readOnly) {
-            post({ type: 'log', level: 'warn',
-              message: 'setReadOnly: this FPB.js build has no read-only mode' });
-          }
-        } else if (msg.type === 'selectElement') {
-          // Plugin-side UI (findings panel, AML tree, …) asks the viewer to
-          // jump to a specific element. We select + scroll so it lands in the
-          // current viewport even if the user has scrolled far away.
-          if (typeof fpb.select === 'function') {
-            const ok = fpb.select(msg.id, { scroll: true });
-            if (!ok) {
-              post({ type: 'log', level: 'info',
-                message: 'selectElement: id not found in current view: ' + msg.id });
-            }
-          }
+            break;
+          case 'setValidationMarkers':
+            fpb.setValidationMarkers(!!message.show);
+            break;
+          default:
+            post({ type: 'log', level: 'warn', message: 'unknown message of the plugin: ' + message.type });
         }
       } catch (err) {
-        post({ type: 'error', message: 'handle ' + msg.type + ' failed: ' + err });
+        importing = false;
+        post({ type: 'error', message: 'handling ' + message.type + ' failed: ' + ((err && err.stack) || err) });
       }
     });
 

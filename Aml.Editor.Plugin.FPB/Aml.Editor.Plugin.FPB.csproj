@@ -111,32 +111,11 @@
           CopyToOutputDirectory="PreserveNewest"
           Pack="true"
           PackagePath="lib\$(TargetFramework)\fpbjs-assets\index.html" />
-
-    <None Include="fpbjs-assets\vendor\**\*"
-          CopyToOutputDirectory="PreserveNewest"
-          Pack="true"
-          PackagePath="lib\$(TargetFramework)\fpbjs-assets\vendor\%(RecursiveDir)%(Filename)%(Extension)" />
   </ItemGroup>
 
   <Target Name="VerifyFpbJsDist" BeforeTargets="BeforeBuild">
     <Error Condition="!Exists('$(FpbJsDistDir)\fpbjs.esm.js')"
            Text="FPB.JS dist/ not built. Run 'npm install &amp;&amp; npm run build' in $(FpbJsDistDir)\.." />
-  </Target>
-
-  <!-- esm.sh ships react-dom.js with an absolute /react@x/... import that 404s under
-       the WebView2 virtual host. Rewrite it to the bare specifier 'react' so the
-       importmap in index.html catches it. Idempotent. -->
-  <Target Name="PatchVendorReactDom" BeforeTargets="BeforeBuild">
-    <PropertyGroup>
-      <_VendorReactDomFile>fpbjs-assets\vendor\react-dom.js</_VendorReactDomFile>
-    </PropertyGroup>
-    <ReadLinesFromFile Condition="Exists('$(_VendorReactDomFile)')" File="$(_VendorReactDomFile)">
-      <Output TaskParameter="Lines" ItemName="_VendorReactDomLines" />
-    </ReadLinesFromFile>
-    <WriteLinesToFile Condition="Exists('$(_VendorReactDomFile)')"
-                      File="$(_VendorReactDomFile)"
-                      Lines="@(_VendorReactDomLines->Replace('&quot;/react@17.0.2/es2022/react.mjs&quot;', '&quot;react&quot;')->Replace('&quot;/react@18.3.1/es2022/react.mjs&quot;', '&quot;react&quot;'))"
-                      Overwrite="true" />
   </Target>
 
   <!-- Stage WebView2Loader.dll so NuGet.Pack treats it as a regular content asset.
