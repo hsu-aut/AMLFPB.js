@@ -134,8 +134,8 @@ test('setTheme dark darkens the page and hides the light and dark button', async
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.locator('#modeler-container')).toHaveAttribute('data-theme', 'dark');
   await expect(page.getByRole('button', { name: /Switch to (Dark|Light) Mode/ })).toHaveCount(0);
-  const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
-  expect(background).not.toBe('rgb(255, 255, 255)');
+  // dark-mode.css fades the colours over 0.3 s
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe('rgb(255, 255, 255)');
 });
 
 test('read-only takes no edits', async ({ page }) => {
