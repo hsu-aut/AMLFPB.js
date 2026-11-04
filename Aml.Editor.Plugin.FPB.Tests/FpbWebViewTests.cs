@@ -14,21 +14,6 @@ public class FpbWebViewTests
 {
     private const string Own = "https://fpbjs.local/index.html";
 
-    private static void RunSta(Action action)
-    {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            try { action(); }
-            catch (Exception ex) { failure = ex; }
-            finally { Dispatcher.CurrentDispatcher.InvokeShutdown(); }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (failure != null) throw new Exception("failed on the STA thread", failure);
-    }
-
     private static void Pump()
     {
         var frame = new DispatcherFrame();
@@ -42,7 +27,7 @@ public class FpbWebViewTests
     [InlineData("{\"type\":\"findings\",\"rules\":[],\"items\":[]}")]
     public void SaveSelectionAndFindingsRunAfterTheEvent(string json)
     {
-        RunSta(() =>
+        Sta.Run(() =>
         {
             var bridge = new FpbWebView(new WebView2());
             var handled = 0;
@@ -60,7 +45,7 @@ public class FpbWebViewTests
     [Fact]
     public void AMessageOfAForeignSourceIsDropped()
     {
-        RunSta(() =>
+        Sta.Run(() =>
         {
             var bridge = new FpbWebView(new WebView2());
             var handled = 0;

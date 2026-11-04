@@ -17,20 +17,6 @@ namespace Aml.Editor.Plugin.FPB.Tests;
 
 public class DiagramWebViewTests
 {
-    private static void RunSta(Action action)
-    {
-        Exception? failure = null;
-        var thread = new Thread(() =>
-        {
-            try { action(); }
-            catch (Exception ex) { failure = ex; }
-        });
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        thread.Join();
-        if (failure != null) throw new Exception("failed on the STA thread", failure);
-    }
-
     /// <summary>Delete pressed in <paramref name="view"/>: how often the window's command ran, and whether the browser would be told the key is handled.</summary>
     private static (int Executed, bool Handled) PressDelete(WebView2 view)
     {
@@ -57,13 +43,14 @@ public class DiagramWebViewTests
         finally
         {
             window.Close();
+            view.Dispose();
         }
     }
 
     [Fact]
     public void TheEditorDoesNotSeeTheKeysOfTheDiagram()
     {
-        RunSta(() =>
+        Sta.Run(() =>
         {
             var (executed, handled) = PressDelete(new DiagramWebView());
             Assert.Equal(0, executed);
@@ -75,7 +62,7 @@ public class DiagramWebViewTests
     public void APlainWebViewHandsTheKeysToTheEditor()
     {
         // the counter-check: this is how Delete reaches the editor today
-        RunSta(() =>
+        Sta.Run(() =>
         {
             var (executed, _) = PressDelete(new WebView2());
             Assert.Equal(1, executed);
