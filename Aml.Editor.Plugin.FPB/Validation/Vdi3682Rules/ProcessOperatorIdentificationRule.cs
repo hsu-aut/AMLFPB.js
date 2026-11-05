@@ -30,8 +30,8 @@ public sealed class ProcessOperatorIdentificationRule : IValidationRule
                     && string.IsNullOrWhiteSpace(po.Name))
                 {
                     var poLabel = po.ID ?? "?";
-                    findings.Add(new ValidationFinding(Id, ValidationSeverity.Info,
-                        $"Process '{procLabel}': ProcessOperator '{poLabel}' has no name/Identification (VDI 3682 Bild 4).",
+                    findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Info,
+                        "Process '{0}': ProcessOperator '{1}' has no name/Identification (VDI 3682 Bild 4).", new object?[] { procLabel, poLabel },
                         po.ID));
                 }
             }

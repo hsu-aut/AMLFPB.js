@@ -5,6 +5,7 @@
 // Update / Refresh / Export are scoped to a single IH (the active sub-tab);
 // only Import remains on the editor toolbar because it creates a brand-new IH.
 
+using Aml.Editor.Plugin.FPB.Localization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -394,7 +395,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
     {
         PluginLog.Error("Unhandled exception in the plugin, caught by its safety net", ex);
         if (IhTabs.SelectedItem is TabItem { Content: IhView view })
-            view.ShowStatus($"Something in the plugin went wrong: {ex.Message} Details are in the log.");
+            view.ShowStatus(L.T("Something in the plugin went wrong: {0} Details are in the log.", ex.Message));
     }
 
     // ── ISupportsThemes ─────────────────────────────────────────────────
@@ -523,7 +524,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
                 return;
             }
 
-            var label = !string.IsNullOrWhiteSpace(ih.Name) ? ih.Name : $"InstanceHierarchy {fallbackIndex++}";
+            var label = !string.IsNullOrWhiteSpace(ih.Name) ? ih.Name : L.T("InstanceHierarchy {0}", fallbackIndex++);
 
             var view = new IhView();
             view.UseDocumentCommands(_newProcessCommand, _importCommand);
@@ -635,14 +636,14 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
     {
         if (_currentDocument == null)
         {
-            MessageBox.Show("Open an AML document first — the new InstanceHierarchy will be added to it.",
-                "FPB.js — New Process", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(L.T("Open an AML document first — the new InstanceHierarchy will be added to it."),
+                L.T("FPB.js — New Process"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         try
         {
-            var dialog = new InputDialog("New FPD Process",
-                "Process name:",
+            var dialog = new InputDialog(L.T("New FPD Process"),
+                L.T("Process name:"),
                 "NewProcess");
             if (dialog.ShowDialog() != true) return;
 
@@ -675,8 +676,8 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         catch (Exception ex)
         {
             PluginLog.Error("New Process failed", ex);
-            MessageBox.Show($"Could not create the new InstanceHierarchy:\n\n{ex.Message}",
-                "FPB.js — New Process Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(L.T("Could not create the new InstanceHierarchy:\n\n{0}", ex.Message),
+                L.T("FPB.js — New Process Error"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -690,7 +691,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         {
             var openDialog = new OpenFileDialog
             {
-                Filter = "FPB.js JSON (*.json)|*.json|All files (*.*)|*.*",
+                Filter = L.T("FPB.js JSON") + " (*.json)|*.json|" + L.T("All files") + " (*.*)|*.*",
                 DefaultExt = ".json",
             };
             if (openDialog.ShowDialog() != true) return;
@@ -716,7 +717,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
                 var convertResult = FpbJsonToCaex.Convert(jsonString);
                 var saveDialog = new SaveFileDialog
                 {
-                    Filter = "AutomationML (*.aml)|*.aml|All files (*.*)|*.*",
+                    Filter = "AutomationML (*.aml)|*.aml|" + L.T("All files") + " (*.*)|*.*",
                     DefaultExt = ".aml",
                     FileName = Path.GetFileNameWithoutExtension(openDialog.FileName) + ".aml",
                 };
@@ -730,7 +731,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         catch (Exception ex)
         {
             PluginLog.Error("Import failed", ex);
-            MessageBox.Show($"Import failed:\n\n{ex.Message}", "FPB.js Import Error",
+            MessageBox.Show(L.T("Import failed:\n\n{0}", ex.Message), L.T("FPB.js Import Error"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -829,11 +830,12 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
             return;
         }
         CompatBanner.Visibility = Visibility.Visible;
-        CompatBannerText.Text = $"⚠ Editor API compatibility: {failed} of {_compatResults.Count} checks failed";
+        CompatBannerText.Text = L.T("⚠ Editor API compatibility: {0} of {1} checks failed", failed, _compatResults.Count);
         var failedDetails = string.Join("\n",
             _compatResults.Where(r => !r.Ok).Select(r => $"• {r.Name}: {r.Detail}"));
-        CompatBanner.ToolTip = "Startup self-test results:\n" + failedDetails +
-            "\n\nPlugin falls back to manual workflow where possible. Open the log for full output.";
+        // the names and details of the checks stay English: they are for the support
+        CompatBanner.ToolTip = L.T("Startup self-test results:") + "\n" + failedDetails +
+            "\n\n" + L.T("Plugin falls back to manual workflow where possible. Open the log for full output.");
     }
 
     private void ConfirmLargeUpdatesToggle_Changed(object sender, RoutedEventArgs e)

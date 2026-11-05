@@ -4,6 +4,7 @@
 // Lifecycle is owned by FpbPlugin which creates an IhView per FPD-bearing IH
 // on DocumentLoaded and disposes them on DocumentUnLoaded.
 
+using Aml.Editor.Plugin.FPB.Localization;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text.Json;
@@ -123,7 +124,7 @@ public partial class IhView : UserControl, IDisposable
         _pendingSnapshotTimestamp = DateTime.UtcNow;
         try { PendingChanged?.Invoke(this, HasPendingSnapshot); }
         catch (Exception ex) { PluginLog.Error("PendingChanged handler threw during restore", ex); }
-        SetStatus("Restored pending edits from before the document switch — click Update InstanceHierarchy to apply, Refresh from AML to discard.");
+        SetStatus(L.T("Restored pending edits from before the document switch — click Update InstanceHierarchy to apply, Refresh from AML to discard."));
     }
 
     /// <summary>VDI 3682 findings shown in the bottom DataGrid. Refreshed at every Update / Refresh cycle.</summary>
@@ -190,8 +191,7 @@ public partial class IhView : UserControl, IDisposable
             // undefined (reading 'type')" in buildSystemLimit) directly to the
             // user so they don't end up staring at an empty canvas wondering
             // what happened.
-            ShowJsErrorBanner("The viewer hit a rendering error. " +
-                              "The diagram may be incomplete. Try Refresh from AML, or check the log file for details.");
+            ShowJsErrorBanner(L.T("The viewer hit a rendering error. The diagram may be incomplete. Try Refresh from AML, or check the log file for details."));
         };
         _bridge.OnDiagramChanged += OnDiagramChangedFromJs;
         _bridge.OnSaveRequested += OnSaveFromPage;
@@ -336,7 +336,7 @@ public partial class IhView : UserControl, IDisposable
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] conversion failed", ex);
-            SetStatus("Conversion failed: " + ex.Message);
+            SetStatus(L.T("Conversion failed: {0}", ex.Message));
         }
     }
 
@@ -353,7 +353,7 @@ public partial class IhView : UserControl, IDisposable
         if (_disposed || _doc == null || _ih == null) return;
         if (string.IsNullOrEmpty(_pendingSnapshot))
         {
-            SetStatus("No pending viewer changes to apply.");
+            SetStatus(L.T("No pending viewer changes to apply."));
             return;
         }
         if (ApplyPending() != ApplyResult.Applied || _disposed) return;
@@ -368,11 +368,11 @@ public partial class IhView : UserControl, IDisposable
         if (saveAttempted) PluginLog.Info($"[{_ihLabel}] Update save: {swSave.ElapsedMilliseconds}ms");
 
         if (saveOk)
-            SetStatus("Updated. Editor save command invoked (Ctrl+S still works manually).");
+            SetStatus(L.T("Updated. Editor save command invoked (Ctrl+S still works manually)."));
         else if (saveAttempted)
-            SetStatus("Updated. Auto-save unavailable — press Ctrl+S to persist.");
+            SetStatus(L.T("Updated. Auto-save unavailable — press Ctrl+S to persist."));
         else
-            SetStatus("Updated. Press Ctrl+S to persist.");
+            SetStatus(L.T("Updated. Press Ctrl+S to persist."));
     }
 
     /// <summary>
@@ -488,7 +488,7 @@ public partial class IhView : UserControl, IDisposable
             // because Aml.Engine is not thread-safe). Each phase is stopwatched and
             // surfaced in the log so spikes become diagnosable.
             if (UpdateButton != null) UpdateButton.IsEnabled = false;
-            SetStatus($"Updating '{_ihLabel}' …");
+            SetStatus(L.T("Updating '{0}' …", _ihLabel));
             swTotal = System.Diagnostics.Stopwatch.StartNew();
 
             // Snapshot meta-info so we can correlate post-update behaviour with
@@ -563,8 +563,8 @@ public partial class IhView : UserControl, IDisposable
             }
             _lastApplyError = ex.Message;
             PluginLog.Error($"[{_ihLabel}] Update failed", ex);
-            MessageBox.Show($"Updating this InstanceHierarchy failed:\n\n{ex.Message}",
-                "FPB.js Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(L.T("Updating this InstanceHierarchy failed:\n\n{0}", ex.Message),
+                L.T("FPB.js Update Error"), MessageBoxButton.OK, MessageBoxImage.Error);
             return ApplyResult.Failed;
         }
         finally
@@ -592,13 +592,11 @@ public partial class IhView : UserControl, IDisposable
         if (age.TotalMinutes < thresholdMinutes) return true;
 
         var ageDesc = age.TotalHours >= 1
-            ? $"{age.TotalHours:F1} hour(s)"
-            : $"{age.TotalMinutes:F0} minute(s)";
-        var msg = $"The pending viewer edit for '{_ihLabel}' is {ageDesc} old.\n\n" +
-                  "Apply it now? If you don't remember making it, choose No and " +
-                  "use Refresh from AML to discard the snapshot.";
+            ? L.T("{0:F1} hour(s)", age.TotalHours)
+            : L.T("{0:F0} minute(s)", age.TotalMinutes);
+        var msg = L.T("The pending viewer edit for '{0}' is {1} old.\n\nApply it now? If you don't remember making it, choose No and use Refresh from AML to discard the snapshot.", _ihLabel, ageDesc);
         var result = MessageBox.Show(msg,
-            "FPB.js — Stale pending edit",
+            L.T("FPB.js — Stale pending edit"),
             MessageBoxButton.YesNo, MessageBoxImage.Warning,
             MessageBoxResult.No);
         return result == MessageBoxResult.Yes;
@@ -624,15 +622,11 @@ public partial class IhView : UserControl, IDisposable
 
             if (elementDelta <= threshold && connectionDelta <= threshold) return true;
 
-            var msg = $"This update would significantly change InstanceHierarchy '{_ihLabel}':\n\n" +
-                      $"  Elements:    AML has {ihElements}, snapshot has {snapElements} (Δ {elementDelta})\n" +
-                      $"  Connections: AML has {ihConnections}, snapshot has {snapConnections} (Δ {connectionDelta})\n\n" +
-                      "If you didn't intentionally add/remove this many items the snapshot may be stale " +
-                      "(e.g. a phantom-pending state from a previous load).\n\n" +
-                      "Apply this update anyway?";
+            var msg = L.T("This update would significantly change InstanceHierarchy '{0}':\n\n  Elements:    AML has {1}, snapshot has {2} (Δ {3})\n  Connections: AML has {4}, snapshot has {5} (Δ {6})\n\nIf you didn't intentionally add/remove this many items the snapshot may be stale (e.g. a phantom-pending state from a previous load).\n\nApply this update anyway?",
+                _ihLabel, ihElements, snapElements, elementDelta, ihConnections, snapConnections, connectionDelta);
 
             var result = MessageBox.Show(msg,
-                "FPB.js — Confirm large InstanceHierarchy update",
+                L.T("FPB.js — Confirm large InstanceHierarchy update"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
                 MessageBoxResult.No);
@@ -641,7 +635,7 @@ public partial class IhView : UserControl, IDisposable
             {
                 PluginLog.Info($"[{_ihLabel}] Large-update confirmation declined: " +
                                $"snapshot={snapElements}/{snapConnections}, ih={ihElements}/{ihConnections}.");
-                SetStatus("Update cancelled.");
+                SetStatus(L.T("Update cancelled."));
                 return false;
             }
             return true;
@@ -712,7 +706,7 @@ public partial class IhView : UserControl, IDisposable
             return;
         }
         if (ApplyPending() == ApplyResult.Applied && !_disposed)
-            SetStatus("Applied the diagram to the InstanceHierarchy. Press Ctrl+S to save the file.");
+            SetStatus(L.T("Applied the diagram to the InstanceHierarchy. Press Ctrl+S to save the file."));
     }
 
     private void ReloadFromAmlButton_Click(object sender, RoutedEventArgs e) => ReloadFromAml();
@@ -750,12 +744,14 @@ public partial class IhView : UserControl, IDisposable
             _lastIhHash = ComputeIhHash(_ih);
 
             PluginLog.Debug($"[{_ihLabel}] Refresh: hash-after={_lastIhHash:X8} changed={(hashBefore != _lastIhHash)}");
-            SetStatus("Viewer re-rendered from current AML." + (backupPath != null ? $" Backup of the dropped diagram changes: {backupPath}" : ""));
+            SetStatus(backupPath != null
+                ? L.T("Viewer re-rendered from current AML. Backup of the dropped diagram changes: {0}", backupPath)
+                : L.T("Viewer re-rendered from current AML."));
         }
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] Refresh failed", ex);
-            SetStatus("Refresh failed: " + ex.Message);
+            SetStatus(L.T("Refresh failed: {0}", ex.Message));
         }
     }
 
@@ -768,21 +764,21 @@ public partial class IhView : UserControl, IDisposable
             var result = CaexToFpbJson.Convert(_doc, _ih);
             var dialog = new SaveFileDialog
             {
-                Filter = "FPB.js JSON (*.json)|*.json|All files (*.*)|*.*",
+                Filter = L.T("FPB.js JSON") + " (*.json)|*.json|" + L.T("All files") + " (*.*)|*.*",
                 DefaultExt = ".json",
                 FileName = SanitiseFileName(_ihLabel) + ".json",
             };
             if (dialog.ShowDialog() != true) return;
             File.WriteAllText(dialog.FileName, result.Value, System.Text.Encoding.UTF8);
             PluginLog.Info($"[{_ihLabel}] Exported to {dialog.FileName}.");
-            SetStatus($"Exported: {Path.GetFileName(dialog.FileName)}");
+            SetStatus(L.T("Exported: {0}", Path.GetFileName(dialog.FileName)));
             foreach (var w in result.Warnings) PluginLog.Warn($"[{_ihLabel}] {w}");
         }
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] Export failed", ex);
-            MessageBox.Show($"Export failed:\n\n{ex.Message}",
-                "FPB.js Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(L.T("Export failed:\n\n{0}", ex.Message),
+                L.T("FPB.js Export Error"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -810,7 +806,7 @@ public partial class IhView : UserControl, IDisposable
             var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
             var dialog = new SaveFileDialog
             {
-                Filter = "Conformance Report (*.json)|*.json|All files (*.*)|*.*",
+                Filter = L.T("Conformance Report") + " (*.json)|*.json|" + L.T("All files") + " (*.*)|*.*",
                 DefaultExt = ".json",
                 FileName = $"{SanitiseFileName(_ihLabel)}-conformance-{stamp}.json",
             };
@@ -819,14 +815,14 @@ public partial class IhView : UserControl, IDisposable
             File.WriteAllText(dialog.FileName, report.ToJson(), System.Text.Encoding.UTF8);
             PluginLog.Info($"[{_ihLabel}] Conformance report written to {dialog.FileName} " +
                            $"(errors={report.Totals.Errors}, warnings={report.Totals.Warnings}, infos={report.Totals.Infos}, clean={report.Totals.Clean}).");
-            SetStatus($"Conformance report: {Path.GetFileName(dialog.FileName)} " +
-                      $"(E:{report.Totals.Errors} W:{report.Totals.Warnings} I:{report.Totals.Infos}).");
+            SetStatus(L.T("Conformance report: {0} (E:{1} W:{2} I:{3}).", Path.GetFileName(dialog.FileName),
+                report.Totals.Errors, report.Totals.Warnings, report.Totals.Infos));
         }
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] Conformance export failed", ex);
-            MessageBox.Show($"Writing the conformance report failed:\n\n{ex.Message}",
-                "FPB.js Conformance Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(L.T("Writing the conformance report failed:\n\n{0}", ex.Message),
+                L.T("FPB.js Conformance Export Error"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -960,7 +956,7 @@ public partial class IhView : UserControl, IDisposable
                     PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while the diagram had edits that are not applied — asking." +
                                    $" hash-before={hashBefore:X8} hash-now={hash:X8}");
                     UpdateConflictBar();
-                    SetStatus("The InstanceHierarchy was changed in the editor. Choose Apply diagram or Reload from AML.");
+                    SetStatus(L.T("The InstanceHierarchy was changed in the editor. Choose Apply diagram or Reload from AML."));
                     break;
                 default:
                     PluginLog.Debug($"[{_ihLabel}] Live sync: AML changed again while the bar stands.");

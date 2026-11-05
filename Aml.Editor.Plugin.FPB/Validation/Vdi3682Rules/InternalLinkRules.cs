@@ -31,18 +31,18 @@ public sealed class InternalLinkInterfaceRule : IValidationRule
                 var bIf = link.BInterface as ExternalInterfaceType;
                 if (aIf == null || bIf == null)
                 {
-                    findings.Add(new ValidationFinding(Id, ValidationSeverity.Warning,
-                        $"Process '{procLabel}': link '{link.Name}' has no resolvable A-/B-interface."));
+                    findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Warning,
+                        "Process '{0}': link '{1}' has no resolvable A-/B-interface.", new object?[] { procLabel, link.Name }));
                     continue;
                 }
                 var aPath = aIf.RefBaseClassPath ?? "";
                 var bPath = bIf.RefBaseClassPath ?? "";
                 if (!ValidOutPaths.Contains(aPath))
-                    findings.Add(new ValidationFinding(Id, ValidationSeverity.Warning,
-                        $"Process '{procLabel}': link '{link.Name}' uses unknown source interface '{aPath}'."));
+                    findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Warning,
+                        "Process '{0}': link '{1}' uses unknown source interface '{2}'.", new object?[] { procLabel, link.Name, aPath }));
                 if (!ValidInPaths.Contains(bPath))
-                    findings.Add(new ValidationFinding(Id, ValidationSeverity.Warning,
-                        $"Process '{procLabel}': link '{link.Name}' uses unknown target interface '{bPath}'."));
+                    findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Warning,
+                        "Process '{0}': link '{1}' uses unknown target interface '{2}'.", new object?[] { procLabel, link.Name, bPath }));
             }
         }
     }
@@ -85,8 +85,8 @@ public sealed class FlowEndpointTypingRule : IValidationRule
                            (sourceFpb == ProcessOperator   && targetFpb == TechnicalResource)
                         || (sourceFpb == TechnicalResource && targetFpb == ProcessOperator);
                     if (!ok)
-                        findings.Add(new ValidationFinding(Id, ValidationSeverity.Warning,
-                            $"Process '{procLabel}': Usage '{link.Name}' connects {sourceFpb}→{targetFpb}, expected PO↔TR."));
+                        findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Warning,
+                            "Process '{0}': Usage '{1}' connects {2}→{3}, expected PO↔TR.", new object?[] { procLabel, link.Name, sourceFpb, targetFpb }));
                 }
                 else
                 {
@@ -94,8 +94,8 @@ public sealed class FlowEndpointTypingRule : IValidationRule
                            (StateTypes.Contains(sourceFpb) && targetFpb == ProcessOperator)
                         || (sourceFpb == ProcessOperator && StateTypes.Contains(targetFpb));
                     if (!ok)
-                        findings.Add(new ValidationFinding(Id, ValidationSeverity.Warning,
-                            $"Process '{procLabel}': Flow '{link.Name}' connects {sourceFpb}→{targetFpb}, expected State↔PO."));
+                        findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Warning,
+                            "Process '{0}': Flow '{1}' connects {2}→{3}, expected State↔PO.", new object?[] { procLabel, link.Name, sourceFpb, targetFpb }));
                 }
             }
         }

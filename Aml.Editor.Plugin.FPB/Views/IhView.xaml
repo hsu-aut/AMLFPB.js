@@ -2,6 +2,7 @@
     x:Class="Aml.Editor.Plugin.FPB.Views.IhView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="clr-namespace:Aml.Editor.Plugin.FPB.Localization"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
@@ -44,18 +45,18 @@
 
             <Button x:Name="UpdateButton"
                     Click="UpdateButton_Click"
-                    ToolTip="Update InstanceHierarchy — push pending FPB.js viewer edits into this IH. Editor save (Ctrl+S) afterwards persists to disk.">
+                    ToolTip="{l:T 'Update InstanceHierarchy — push pending FPB.js viewer edits into this IH. Editor save (Ctrl+S) afterwards persists to disk.'}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE895;" Foreground="#E08020"/>
-                    <TextBlock Text="Update" VerticalAlignment="Center"/>
+                    <TextBlock Text="{l:T 'Update'}" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
             <Button x:Name="RefreshButton"
                     Click="RefreshButton_Click"
-                    ToolTip="Refresh from AML — re-render this viewer from the current AML document state.">
+                    ToolTip="{l:T 'Refresh from AML — re-render this viewer from the current AML document state.'}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE72C;" Foreground="#2070C0"/>
-                    <TextBlock Text="Refresh" VerticalAlignment="Center"/>
+                    <TextBlock Text="{l:T 'Refresh'}" VerticalAlignment="Center"/>
                 </StackPanel>
             </Button>
             <!-- View only: the diagram takes no edits (FPB.js read-only mode).
@@ -64,10 +65,10 @@
             <ToggleButton x:Name="ViewOnlyToggle"
                           Checked="ViewOnlyToggle_Changed"
                           Unchecked="ViewOnlyToggle_Changed"
-                          ToolTip="View only: look at the diagram, zoom, switch layers and export, but change nothing. Click again to edit.">
+                          ToolTip="{l:T 'View only: look at the diagram, zoom, switch layers and export, but change nothing. Click again to edit.'}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE72E;" Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"/>
-                    <TextBlock Text="View only" VerticalAlignment="Center"/>
+                    <TextBlock Text="{l:T 'View only'}" VerticalAlignment="Center"/>
                 </StackPanel>
             </ToggleButton>
             <Separator/>
@@ -79,25 +80,25 @@
                  Petri net commands into this tab or doubled these. -->
             <Button x:Name="ProcessMenuButton"
                     Click="ProcessMenuButton_Click"
-                    ToolTip="Create, import or export an FPD process.">
+                    ToolTip="{l:T 'Create, import or export an FPD process.'}">
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Style="{StaticResource IconText}" Text="&#xE700;" Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"/>
-                    <TextBlock Text="Process &#x25BE;" VerticalAlignment="Center"/>
+                    <TextBlock Text="{l:T 'Process &#x25BE;'}" VerticalAlignment="Center"/>
                 </StackPanel>
                 <Button.ContextMenu>
                     <ContextMenu x:Name="ProcessMenu">
                         <MenuItem x:Name="NewProcessItem"
-                                  Header="New Process"
-                                  ToolTip="Create an empty FPD InstanceHierarchy in the current AML document."/>
+                                  Header="{l:T 'New Process'}"
+                                  ToolTip="{l:T 'Create an empty FPD InstanceHierarchy in the current AML document.'}"/>
                         <MenuItem x:Name="ImportItem"
-                                  Header="Import FPB.js JSON..."
-                                  ToolTip="Load an FPB.js JSON file and add its FPD content as a new InstanceHierarchy."/>
+                                  Header="{l:T 'Import FPB.js JSON...'}"
+                                  ToolTip="{l:T 'Load an FPB.js JSON file and add its FPD content as a new InstanceHierarchy.'}"/>
                         <Separator/>
-                        <MenuItem Header="Export JSON..."
-                                  ToolTip="Save this InstanceHierarchy's FPD content as an FPB.js JSON file."
+                        <MenuItem Header="{l:T 'Export JSON...'}"
+                                  ToolTip="{l:T 'Save this InstanceHierarchy\'s FPD content as an FPB.js JSON file.'}"
                                   Click="ExportButton_Click"/>
-                        <MenuItem Header="Export Conformance Report..."
-                                  ToolTip="Write a machine-readable VDI 3682 validation summary (JSON) for CI pipelines, audit logs and paper appendices."
+                        <MenuItem Header="{l:T 'Export Conformance Report...'}"
+                                  ToolTip="{l:T 'Write a machine-readable VDI 3682 validation summary (JSON) for CI pipelines, audit logs and paper appendices.'}"
                                   Click="ConformanceButton_Click"/>
                     </ContextMenu>
                 </Button.ContextMenu>
@@ -138,19 +139,19 @@
                                    Margin="0,0,8,0"/>
                         <TextBlock Grid.Column="1"
                                    x:Name="ConflictMessage"
-                                   Text="The InstanceHierarchy was changed in the editor. The diagram has changes that are not in it yet."
+                                   Text="{l:T 'The InstanceHierarchy was changed in the editor. The diagram has changes that are not in it yet.'}"
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"
                                    VerticalAlignment="Center"/>
                         <Button Grid.Column="2"
                                 x:Name="ApplyDiagramButton"
-                                Content="Apply diagram"
+                                Content="{l:T 'Apply diagram'}"
                                 Click="ApplyDiagramButton_Click"
                                 Margin="12,0,0,0"
                                 Padding="8,2"/>
                         <Button Grid.Column="3"
                                 x:Name="ReloadFromAmlButton"
-                                Content="Reload from AML"
+                                Content="{l:T 'Reload from AML'}"
                                 Click="ReloadFromAmlButton_Click"
                                 Margin="8,0,0,0"
                                 Padding="8,2"/>
@@ -183,7 +184,7 @@
                                    VerticalAlignment="Center"/>
                         <Button Grid.Column="2"
                                 x:Name="JsErrorRetryButton"
-                                Content="Refresh from AML"
+                                Content="{l:T 'Refresh from AML'}"
                                 Click="JsErrorRetryButton_Click"
                                 Margin="12,0,0,0"
                                 Padding="8,2"/>
@@ -198,7 +199,7 @@
                     x:Name="WebViewPlaceholder"
                     Background="{DynamicResource MahApps.Brushes.ThemeBackground}"
                     Visibility="Visible">
-                <TextBlock Text="Loading FPB.js viewer…"
+                <TextBlock Text="{l:T 'Loading FPB.js viewer…'}"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource MahApps.Brushes.Gray2}"
@@ -235,11 +236,11 @@
                                Foreground="{DynamicResource MahApps.Brushes.Gray2}"
                                VerticalAlignment="Center"
                                Margin="0,0,6,0"/>
-                    <TextBlock Text="VDI 3682 Findings"
+                    <TextBlock Text="{l:T 'VDI 3682 Findings'}"
                                FontWeight="SemiBold"
                                VerticalAlignment="Center"/>
                     <TextBlock x:Name="FindingsSummary"
-                               Text=" — no findings"
+                               Text="{l:T ' — no findings'}"
                                Foreground="{DynamicResource MahApps.Brushes.Gray2}"
                                VerticalAlignment="Center"
                                Margin="6,0,0,0"/>
@@ -273,10 +274,10 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="Rule" Binding="{Binding RuleId}" Width="220"/>
-                    <DataGridTextColumn Header="Element" Binding="{Binding ElementLabel}" Width="160"/>
-                    <DataGridTextColumn Header="Layer" Binding="{Binding Layer}" Width="120"/>
-                    <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
+                    <DataGridTextColumn Header="{l:T 'Rule'}" Binding="{Binding RuleId}" Width="220"/>
+                    <DataGridTextColumn Header="{l:T 'Element'}" Binding="{Binding ElementLabel}" Width="160"/>
+                    <DataGridTextColumn Header="{l:T 'Layer'}" Binding="{Binding Layer}" Width="120"/>
+                    <DataGridTextColumn Header="{l:T 'Message'}" Binding="{Binding Message}" Width="*"/>
                 </DataGrid.Columns>
             </DataGrid>
         </Grid>

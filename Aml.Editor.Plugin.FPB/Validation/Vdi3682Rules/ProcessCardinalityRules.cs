@@ -22,12 +22,12 @@ public sealed class SystemLimitCardinalityRule : IValidationRule
                 SucToElement.GetValueOrDefault(ie.RefBaseSystemUnitPath ?? "", "") == SystemLimit);
 
             if (slCount == 0)
-                findings.Add(new ValidationFinding(Id, ValidationSeverity.Error,
-                    $"Process '{procLabel}': missing SystemLimit (VDI 3682 Bild 2: cardinality exactly 1).",
+                findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Error,
+                    "Process '{0}': missing SystemLimit (VDI 3682 Bild 2: cardinality exactly 1).", new object?[] { procLabel },
                     proc.ID));
             else if (slCount > 1)
-                findings.Add(new ValidationFinding(Id, ValidationSeverity.Error,
-                    $"Process '{procLabel}': {slCount} SystemLimits found, expected exactly 1.",
+                findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Error,
+                    "Process '{0}': {1} SystemLimits found, expected exactly 1.", new object?[] { procLabel, slCount },
                     proc.ID));
         }
     }
@@ -46,8 +46,8 @@ public sealed class StateCardinalityRule : IValidationRule
                 StateTypes.Contains(SucToElement.GetValueOrDefault(ie.RefBaseSystemUnitPath ?? "", "")));
 
             if (stateCount < 2)
-                findings.Add(new ValidationFinding(Id, ValidationSeverity.Warning,
-                    $"Process '{ProcessRuleHelpers.Label(proc)}': only {stateCount} state(s), expected ≥2 (VDI 3682 Bild 2).",
+                findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Warning,
+                    "Process '{0}': only {1} state(s), expected ≥2 (VDI 3682 Bild 2).", new object?[] { ProcessRuleHelpers.Label(proc), stateCount },
                     proc.ID));
         }
     }
@@ -66,8 +66,8 @@ public sealed class ProcessOperatorCardinalityRule : IValidationRule
                 SucToElement.GetValueOrDefault(ie.RefBaseSystemUnitPath ?? "", "") == ProcessOperator);
 
             if (poCount < 1)
-                findings.Add(new ValidationFinding(Id, ValidationSeverity.Warning,
-                    $"Process '{ProcessRuleHelpers.Label(proc)}': no ProcessOperator (VDI 3682 Bild 2: cardinality 1..*).",
+                findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Warning,
+                    "Process '{0}': no ProcessOperator (VDI 3682 Bild 2: cardinality 1..*).", new object?[] { ProcessRuleHelpers.Label(proc) },
                     proc.ID));
         }
     }

@@ -176,15 +176,15 @@ public static class Vdi3682OclRuleSet
             if (!options.IsRuleDisabled(UnclassifiedRuleId))
             {
                 foreach (var ie in model.UnclassifiedElements().Where(IsInsideFpdProcess))
-                    findings.Add(new ValidationFinding(UnclassifiedRuleId, ValidationSeverity.Warning,
-                        $"Element '{ie.Name ?? ie.ID}' has no recognised FPD type (SUC path or role) — it is invisible to all FPD rules.",
+                    findings.Add(ValidationFinding.Of(UnclassifiedRuleId, ValidationSeverity.Warning,
+                        "Element '{0}' has no recognised FPD type (SUC path or role) — it is invisible to all FPD rules.", new object?[] { ie.Name ?? ie.ID },
                         ie.ID));
             }
         }
         catch (Exception ex)
         {
-            findings.Add(new ValidationFinding(RuleIdPrefix.TrimEnd('.'), ValidationSeverity.Warning,
-                $"OCL validation pass failed: {ex.Message}"));
+            findings.Add(ValidationFinding.Of(RuleIdPrefix.TrimEnd('.'), ValidationSeverity.Warning,
+                "OCL validation pass failed: {0}", new object?[] { ex.Message }));
         }
     }
 

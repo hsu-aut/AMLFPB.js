@@ -1,3 +1,4 @@
+using Aml.Editor.Plugin.FPB.Localization;
 using System.Windows.Media;
 using Aml.Editor.Plugin.FPB.Validation;
 using Aml.Engine.CAEX;
@@ -46,14 +47,15 @@ public sealed class FindingRow
         return new FindingRow
         {
             RuleId = f.RuleId,
-            Message = f.Message,
+            // the plugin's own rules carry a template: shown in the plugin's language
+            Message = f.Template != null ? L.T(f.Template, f.Args) : f.Message,
             // Brace-free: the double-click focus-jump feeds this to the FPB.js
             // viewer, whose element ids never carry the CAEX {…} wrapper — a
             // braced id made the jump miss silently for every mapper-built IE.
             ElementId = StripBraces(id),
             ElementLabel = label,
             Layer = layer ?? "",
-            SeverityName = f.Severity.ToString(),
+            SeverityName = SeverityText(f.Severity),
             SeverityGlyph = GlyphFor(f.Severity),
             SeverityBrush = BrushFor(f.Severity),
             SeverityRank = RankFor(f.Severity),
@@ -78,12 +80,19 @@ public sealed class FindingRow
             Layer = layer ?? "",
             ProcessId = p.ProcessId ?? "",
             FromDiagram = true,
-            SeverityName = severity.ToString(),
+            SeverityName = SeverityText(severity),
             SeverityGlyph = GlyphFor(severity),
             SeverityBrush = BrushFor(severity),
             SeverityRank = RankFor(severity),
         };
     }
+
+    private static string SeverityText(ValidationSeverity s) => s switch
+    {
+        ValidationSeverity.Error => L.T("Error"),
+        ValidationSeverity.Warning => L.T("Warning"),
+        _ => L.T("Info"),
+    };
 
     private static string GlyphFor(ValidationSeverity s) => s switch
     {

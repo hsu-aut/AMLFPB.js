@@ -1,3 +1,4 @@
+using Aml.Editor.Plugin.FPB.Localization;
 namespace Aml.Editor.Plugin.FPB.Views;
 
 /// <summary>What became of applying the diagram to the InstanceHierarchy.</summary>
@@ -50,16 +51,16 @@ public static class SaveFlow
 
     public static string StatusText(SaveOutcome outcome, string? reason) => outcome switch
     {
-        SaveOutcome.AppliedAndSaved => "Applied and saved.",
-        SaveOutcome.Saved => "Saved.",
-        SaveOutcome.NotSaved => "Not saved.",
-        SaveOutcome.ApplyFailed => "Not saved: applying the diagram failed. " + (reason ?? ""),
-        SaveOutcome.SaveFailed => "Applied. Saving failed, please save in the editor.",
-        SaveOutcome.InConflict => "The InstanceHierarchy was changed in the editor. Choose Apply diagram or Reload from AML first.",
+        SaveOutcome.AppliedAndSaved => L.T("Applied and saved."),
+        SaveOutcome.Saved => L.T("Saved."),
+        SaveOutcome.NotSaved => L.T("Not saved."),
+        SaveOutcome.ApplyFailed => L.T("Not saved: applying the diagram failed. {0}", reason ?? ""),
+        SaveOutcome.SaveFailed => L.T("Applied. Saving failed, please save in the editor."),
+        SaveOutcome.InConflict => L.T("The InstanceHierarchy was changed in the editor. Choose Apply diagram or Reload from AML first."),
         _ => "",
     };
 
     /// <summary>The status of a tab whose changes are not in a file the editor just saved (V23).</summary>
     public static string SavedWithoutPendingText(string tab) =>
-        $"Saved without the diagram changes of '{tab}' that are not applied yet.";
+        L.T("Saved without the diagram changes of '{0}' that are not applied yet.", tab);
 }

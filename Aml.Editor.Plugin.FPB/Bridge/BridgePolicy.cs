@@ -1,3 +1,4 @@
+using Aml.Editor.Plugin.FPB.Localization;
 using System.IO;
 
 namespace Aml.Editor.Plugin.FPB.Bridge;
@@ -58,10 +59,10 @@ public static class BridgePolicy
     /// <summary>The filter of the save dialog for a download, after its extension (V21).</summary>
     public static string SaveFilterFor(string fileName)
     {
-        const string all = "All files (*.*)|*.*";
+        var all = L.T("All files") + " (*.*)|*.*";
         var extension = Path.GetExtension(fileName);
         if (string.IsNullOrEmpty(extension)) return all;
         var name = extension.TrimStart('.').ToUpperInvariant();
-        return $"{name} file (*{extension})|*{extension}|{all}";
+        return L.T("{0} file", name) + $" (*{extension})|*{extension}|{all}";
     }
 }

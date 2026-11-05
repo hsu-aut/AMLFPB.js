@@ -2,6 +2,7 @@
     x:Class="Aml.Editor.Plugin.FPB.FpbPlugin"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:l="clr-namespace:Aml.Editor.Plugin.FPB.Localization"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:aml="clr-namespace:Aml.Editor.Plugin.WPFBase;assembly=Aml.Editor.Plugin.Contract"
@@ -17,7 +18,7 @@
         <!-- Tab 1: per-IH sub-tabs -->
         <TabItem>
             <TabItem.Header>
-                <TextBlock Text="FPB.js Viewer" FontSize="12"/>
+                <TextBlock Text="{l:T 'FPB.js Viewer'}" FontSize="12"/>
             </TabItem.Header>
             <Grid>
                 <!-- Let the editor's Aml.Skins theme own the appearance — no custom
@@ -38,14 +39,14 @@
                         </TextBlock>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,0">
                             <Button x:Name="PlaceholderNewProcessButton"
-                                    Content="New Process"
+                                    Content="{l:T 'New Process'}"
                                     Padding="10,3"
                                     Margin="0,0,8,0"
-                                    ToolTip="Create an empty FPD InstanceHierarchy in the current AML document."/>
+                                    ToolTip="{l:T 'Create an empty FPD InstanceHierarchy in the current AML document.'}"/>
                             <Button x:Name="PlaceholderImportButton"
-                                    Content="Import FPB.js JSON..."
+                                    Content="{l:T 'Import FPB.js JSON...'}"
                                     Padding="10,3"
-                                    ToolTip="Load an FPB.js JSON file and add its FPD content as a new InstanceHierarchy."/>
+                                    ToolTip="{l:T 'Load an FPB.js JSON file and add its FPD content as a new InstanceHierarchy.'}"/>
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -55,7 +56,7 @@
         <!-- Tab 2: status log + diagnostics controls -->
         <TabItem>
             <TabItem.Header>
-                <TextBlock Text="Status / Diagnostics" FontSize="12"/>
+                <TextBlock Text="{l:T 'Status / Diagnostics'}" FontSize="12"/>
             </TabItem.Header>
             <Grid Margin="8">
                 <Grid.RowDefinitions>
@@ -65,7 +66,7 @@
                 </Grid.RowDefinitions>
 
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
-                    <TextBlock Text="FPB.js Import/Export (VDI 3682)"
+                    <TextBlock Text="{l:T 'FPB.js Import/Export (VDI 3682)'}"
                                FontWeight="SemiBold"
                                FontSize="13"
                                VerticalAlignment="Center"/>
@@ -77,7 +78,7 @@
                             CornerRadius="3"
                             Padding="6,2"
                             Margin="12,0,0,0"
-                            ToolTip="Editor-API compatibility check ran at startup. Hover or open the log file for details.">
+                            ToolTip="{l:T 'Editor-API compatibility check ran at startup. Hover or open the log file for details.'}">
                         <TextBlock x:Name="CompatBannerText"
                                    Text=""
                                    FontSize="11"
@@ -89,25 +90,25 @@
                 <StackPanel Grid.Row="1" Orientation="Vertical" Margin="0,0,0,6">
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                         <CheckBox x:Name="DebugToggle"
-                                  Content="Verbose debug logging"
+                                  Content="{l:T 'Verbose debug logging'}"
                                   VerticalAlignment="Center"
                                   Margin="0,0,12,0"
                                   Checked="DebugToggle_Changed"
                                   Unchecked="DebugToggle_Changed"/>
                         <CheckBox x:Name="AutoSaveToggle"
-                                  Content="Auto-save editor after Update InstanceHierarchy"
+                                  Content="{l:T 'Auto-save editor after Update InstanceHierarchy'}"
                                   VerticalAlignment="Center"
                                   Margin="0,0,12,0"
                                   Checked="AutoSaveToggle_Changed"
                                   Unchecked="AutoSaveToggle_Changed"/>
                         <CheckBox x:Name="ConfirmLargeUpdatesToggle"
-                                  Content="Confirm large updates"
+                                  Content="{l:T 'Confirm large updates'}"
                                   VerticalAlignment="Center"
-                                  ToolTip="When the snapshot would add/remove more elements or connections than the threshold, ask for confirmation before applying."
+                                  ToolTip="{l:T 'When the snapshot would add/remove more elements or connections than the threshold, ask for confirmation before applying.'}"
                                   Margin="0,0,8,0"
                                   Checked="ConfirmLargeUpdatesToggle_Changed"
                                   Unchecked="ConfirmLargeUpdatesToggle_Changed"/>
-                        <TextBlock Text="(threshold:"
+                        <TextBlock Text="{l:T '(threshold:'}"
                                    VerticalAlignment="Center"
                                    Margin="0,0,4,0"/>
                         <TextBox x:Name="SafetyThresholdInput"
@@ -115,7 +116,7 @@
                                  VerticalAlignment="Center"
                                  VerticalContentAlignment="Center"
                                  TextAlignment="Right"
-                                 ToolTip="Adds + removes above this number trigger the confirmation dialog. Set 0 to confirm every update."
+                                 ToolTip="{l:T 'Adds + removes above this number trigger the confirmation dialog. Set 0 to confirm every update.'}"
                                  LostFocus="SafetyThresholdInput_LostFocus"
                                  KeyDown="SafetyThresholdInput_KeyDown"/>
                         <TextBlock Text=")"
@@ -124,7 +125,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="OpenLogFolderButton"
-                                Content="Open log folder"
+                                Content="{l:T 'Open log folder'}"
                                 Padding="8,2"
                                 Click="OpenLogFolderButton_Click"/>
                         <TextBlock x:Name="LogFilePathLabel"
@@ -146,7 +147,7 @@
                          BorderThickness="1"
                          BorderBrush="{DynamicResource MahApps.Brushes.Gray7}"
                          Padding="4"
-                         Text="Ready. Each FPD InstanceHierarchy in the open AML document gets its own tab in the FPB.js Viewer tab; per-IH Update/Refresh/Export buttons live inside that tab."/>
+                         Text="{l:T 'Ready. Each FPD InstanceHierarchy in the open AML document gets its own tab in the FPB.js Viewer tab; per-IH Update/Refresh/Export buttons live inside that tab.'}"/>
             </Grid>
         </TabItem>
     </TabControl>

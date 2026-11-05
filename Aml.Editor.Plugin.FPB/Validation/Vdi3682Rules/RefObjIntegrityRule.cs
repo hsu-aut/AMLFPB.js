@@ -22,8 +22,8 @@ public sealed class RefObjIntegrityRule : IValidationRule
             if (string.IsNullOrEmpty(refValue)) continue;                          // top-level process
             if (ctx.ProcessOperatorIds.Contains(refValue.Trim('{', '}'))) continue; // resolves (brace-insensitive)
 
-            findings.Add(new ValidationFinding(Id, ValidationSeverity.Error,
-                $"Process '{ProcessRuleHelpers.Label(proc)}': decomposition reference '{refValue}' does not resolve to any ProcessOperator (dangling decomposition).",
+            findings.Add(ValidationFinding.Of(Id, ValidationSeverity.Error,
+                "Process '{0}': decomposition reference '{1}' does not resolve to any ProcessOperator (dangling decomposition).", new object?[] { ProcessRuleHelpers.Label(proc), refValue },
                 proc.ID));
         }
     }
