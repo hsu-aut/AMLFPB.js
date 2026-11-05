@@ -52,6 +52,7 @@ public static class JsMessageType
     public const string Select               = "select";
     public const string SetReadOnly          = "setReadOnly";
     public const string SetValidationMarkers = "setValidationMarkers";
+    public const string SetAmlLinks          = "setAmlLinks";
 }
 
 /// <summary>An import into the viewer, with the number the page answers with (016f E3, T18).</summary>
@@ -88,4 +89,21 @@ public sealed record SetValidationMarkersMessage([property: JsonPropertyName("ty
                                                  [property: JsonPropertyName("show")] bool Show)
 {
     public static SetValidationMarkersMessage For(bool show) => new(JsMessageType.SetValidationMarkers, show);
+}
+
+/// <summary>
+/// An InternalLink of the AML file that deleting the element on the layer
+/// removes (016f E4), as FPB.js <c>setAmlLinks</c> takes it.
+/// </summary>
+public sealed record AmlLinkEntry([property: JsonPropertyName("processId")] string ProcessId,
+                                  [property: JsonPropertyName("elementId")] string ElementId,
+                                  [property: JsonPropertyName("name")] string Name,
+                                  [property: JsonPropertyName("link")] string Link,
+                                  [property: JsonPropertyName("owner")] string Owner);
+
+/// <summary>Payload handing the viewer the links of the AML file for its delete question (016f E4, T22).</summary>
+public sealed record SetAmlLinksMessage([property: JsonPropertyName("type")] string Type,
+                                        [property: JsonPropertyName("links")] IReadOnlyList<AmlLinkEntry> Links)
+{
+    public static SetAmlLinksMessage For(IReadOnlyList<AmlLinkEntry> links) => new(JsMessageType.SetAmlLinks, links);
 }

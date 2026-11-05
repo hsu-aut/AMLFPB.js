@@ -35,6 +35,9 @@ public sealed class FpbWebView : IDisposable
     private bool? _readOnly;
     // Wanted markers of the model check; sent again on every 'ready' as well
     private bool? _validationMarkers;
+    // Links of the AML file for the delete question (016f E4); sent again on
+    // every 'ready', before a buffered import
+    private IReadOnlyList<AmlLinkEntry>? _amlLinks;
     private readonly ImportSequence _imports = new();
 
     private EventHandler<CoreWebView2WebMessageReceivedEventArgs>? _webMessageHandler;
@@ -319,6 +322,21 @@ public sealed class FpbWebView : IDisposable
     }
 
     /// <summary>
+    /// Hand the viewer the links of the AML file that deleting an element
+    /// removes, per layer (016f E4, T22). Kept and sent again whenever the
+    /// page (re)loads.
+    /// </summary>
+    public void SetAmlLinks(IReadOnlyList<AmlLinkEntry> links)
+    {
+        if (_disposed) return;
+        _amlLinks = links;
+        if (!_ready || _view.CoreWebView2 == null) return;
+
+        var envelope = JsonSerializer.Serialize(SetAmlLinksMessage.For(links));
+        _view.CoreWebView2.PostWebMessageAsJson(envelope);
+    }
+
+    /// <summary>
     /// Ask the viewer to select an element by id, on the layer
     /// <paramref name="processId"/> if given, and scroll it into view. Used by
     /// the findings list and the AML tree. Silently no-ops if the bridge isn't
@@ -467,6 +485,8 @@ public sealed class FpbWebView : IDisposable
 
     private void FlushPending()
     {
+        // the links first: a delete right after the import already asks
+        if (_amlLinks is { } al)     { SetAmlLinks(al); }
         if (_pendingJson is { } pj)  { _pendingJson  = null; ImportJson(pj); }
         if (_pendingTheme is { } pt) { _pendingTheme = null; SendTheme(pt); }
         if (_readOnly is { } ro)     { SetReadOnly(ro); }

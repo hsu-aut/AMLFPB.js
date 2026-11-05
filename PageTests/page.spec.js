@@ -213,3 +213,21 @@ test('in 535 x 585 nothing sticks out and toolbar and panel do not overlap', asy
   await page.waitForTimeout(600);
   await page.screenshot({ path: testInfo.outputPath('narrow-dark.png') });
 });
+
+// 016f E4: the links of the AML file the plugin sends; the delete question names them
+test('setAmlLinks from the plugin makes the delete question name the links', async ({ page }) => {
+  await openPluginPage(page);
+  await importModel(page);
+  await send(page, {
+    type: 'setAmlLinks',
+    links: [{ processId: MAIN, elementId: PRUEFEN, name: 'Prüfen', link: 'L1', owner: 'Plant' }]
+  });
+  await page.evaluate((id) => {
+    window.fpb.get('fpbDelete').remove([window.fpb.get('elementRegistry').get(id)]);
+  }, PRUEFEN);
+  const question = page.locator('dialog.fpb-dialog[open]');
+  await expect(question).toContainText('L1 (Plant) to Prüfen');
+  await expect(question).toContainText('Applying the diagram to the AML file removes them.');
+  await question.locator('[data-answer="cancel"]').click();
+  expect(await page.evaluate((id) => !!window.fpb.get('elementRegistry').get(id), PRUEFEN)).toBe(true);
+});

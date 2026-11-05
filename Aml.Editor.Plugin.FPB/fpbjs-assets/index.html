@@ -248,6 +248,9 @@
           case 'setValidationMarkers':
             fpb.setValidationMarkers(!!message.show);
             break;
+          case 'setAmlLinks':
+            fpb.setAmlLinks(Array.isArray(message.links) ? message.links : null);
+            break;
           default:
             post({ type: 'log', level: 'warn', message: 'unknown message of the plugin: ' + message.type });
         }

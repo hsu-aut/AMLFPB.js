@@ -35,6 +35,14 @@ public class BridgeMessageTests
     }
 
     [Fact]
+    public void SetAmlLinksSerializesLikeTheLibraryExpectsIt()
+    {
+        Assert.Equal(
+            "{\"type\":\"setAmlLinks\",\"links\":[{\"processId\":\"p\",\"elementId\":\"e\",\"name\":\"Heizen\",\"link\":\"L1\",\"owner\":\"Plant\"}]}",
+            JsonSerializer.Serialize(SetAmlLinksMessage.For(new[] { new AmlLinkEntry("p", "e", "Heizen", "L1", "Plant") })));
+    }
+
+    [Fact]
     public void ImportJsonCarriesItsNumberAndTheModel()
     {
         using var model = JsonDocument.Parse("[1]");
