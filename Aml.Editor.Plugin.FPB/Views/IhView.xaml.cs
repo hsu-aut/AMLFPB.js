@@ -82,6 +82,9 @@ public partial class IhView : UserControl, IDisposable
     // which object is which element on which layer (V26), rebuilt with every
     // load and every apply
     private FpdElementIndex _index = FpdElementIndex.Empty;
+    // 016f E4, T22: the links of the file the page's delete question names,
+    // as last sent (AmlLinkList.Key)
+    private string? _lastAmlLinksKey;
 
     /// <summary>Raised when the user switches View only in this tab (the host applies it to all tabs and remembers it).</summary>
     public event Action<IhView, bool>? ViewOnlyChanged;
@@ -287,6 +290,7 @@ public partial class IhView : UserControl, IDisposable
         {
             var result = CaexToFpbJson.Convert(_doc, _ih);
             _index = FpdElementIndex.Build(_ih);
+            SendAmlLinks(force: true);
             // Stamp AFTER ImportJson returns successfully, not before. If
             // ImportJson silently short-circuits (bridge not ready,
             // CoreWebView2 null) or PostWebMessageAsJson throws, a pre-stamp
@@ -514,6 +518,7 @@ public partial class IhView : UserControl, IDisposable
             if (_pendingSnapshot != null) _sync.DiagramChanged(equalsBaseline: false);
             UpdateConflictBar();
             _index = FpdElementIndex.Build(_ih);
+            SendAmlLinks(force: false);
             // Re-anchor the echo baseline on the state we just wrote into the
             // document. Viewer == document == baseline now; a later undo back
             // to the PRE-update state differs from this baseline and correctly
@@ -874,6 +879,34 @@ public partial class IhView : UserControl, IDisposable
         catch (Exception ex) { PluginLog.Error("PendingChanged handler threw", ex); }
     }
 
+    /// <summary>
+    /// Find the links of the file that deleting an element of this hierarchy
+    /// removes and hand them to the page when they changed since the last time
+    /// (always with <paramref name="force"/>). The index is built afresh here
+    /// so that the one of the selection stays as it is. A failure leaves the
+    /// page's list as it was.
+    /// </summary>
+    private void SendAmlLinks(bool force)
+    {
+        if (_disposed || _bridge == null || _doc == null || _ih == null) return;
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var links = AmlLinkList.For(ForeignLinks.Find(_doc, _ih), FpdElementIndex.Build(_ih));
+            sw.Stop();
+            var key = AmlLinkList.Key(links);
+            if (!force && key == _lastAmlLinksKey) return;
+            _lastAmlLinksKey = key;
+            _bridge.SetAmlLinks(links);
+            var text = $"[{_ihLabel}] AML links for the delete question: {links.Count}, found in {sw.ElapsedMilliseconds} ms";
+            if (force) PluginLog.Info(text); else PluginLog.Debug(text);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warn($"[{_ihLabel}] AML links not updated: {ex.Message}");
+        }
+    }
+
     // ── Live-sync polling: hash THIS IH only ──────────────────────────────
     private void StartLiveSync()
     {
@@ -900,6 +933,10 @@ public partial class IhView : UserControl, IDisposable
         if (_disposed || _liveSyncSuppressed || _doc == null || _ih == null || _bridge == null) return;
         try
         {
+            // the links follow the whole file, also while the bar stands; they
+            // touch neither the diagram nor the sync state (016f E4, V20)
+            SendAmlLinks(force: false);
+
             var hash = ComputeIhHash(_ih);
             if (hash == _lastIhHash) return;
             var hashBefore = _lastIhHash;
