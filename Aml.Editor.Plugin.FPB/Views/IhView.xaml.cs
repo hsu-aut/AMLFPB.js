@@ -85,6 +85,8 @@ public partial class IhView : UserControl, IDisposable
     // 016f E4, T22: the links of the file the page's delete question names,
     // as last sent (AmlLinkList.Key)
     private string? _lastAmlLinksKey;
+    // the tick looks for them only after a change of the document
+    private DocumentChanges? _docChanges;
 
     /// <summary>Raised when the user switches View only in this tab (the host applies it to all tabs and remembers it).</summary>
     public event Action<IhView, bool>? ViewOnlyChanged;
@@ -170,6 +172,8 @@ public partial class IhView : UserControl, IDisposable
         _ih = ih;
         _ihLabel = ihLabel;
         _settings = settings;
+        _docChanges?.Dispose();
+        _docChanges = new DocumentChanges(doc);
 
         _bridge = new FpbWebView(WebView);
         _bridge.Ready += () =>
@@ -934,8 +938,9 @@ public partial class IhView : UserControl, IDisposable
         try
         {
             // the links follow the whole file, also while the bar stands; they
-            // touch neither the diagram nor the sync state (016f E4, V20)
-            SendAmlLinks(force: false);
+            // touch neither the diagram nor the sync state (016f E4, V20). The
+            // search walks the whole document, so only after a change of it
+            if (_docChanges?.TakeChanged() ?? true) SendAmlLinks(force: false);
 
             var hash = ComputeIhHash(_ih);
             if (hash == _lastIhHash) return;
@@ -1171,6 +1176,8 @@ public partial class IhView : UserControl, IDisposable
         if (_disposed) return;
         _disposed = true;
         StopLiveSync();
+        _docChanges?.Dispose();
+        _docChanges = null;
         try { _bridge?.Dispose(); } catch { /* best effort */ }
         _bridge = null;
         // _bridge.Dispose only detaches the CoreWebView2 event handlers; the
