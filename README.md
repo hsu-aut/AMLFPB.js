@@ -142,6 +142,10 @@ Settings are persisted in `%APPDATA%\AutomationMLEditor\FpbPlugin\settings.json`
 
 The boolean toggles are exposed in the plugin's Diagnostics tab, `view_only` in each tab's toolbar. The numeric values are edited in the JSON file directly.
 
+### Language
+
+The plugin speaks English or German, as the display language of Windows says, the same way the OPC UA plugin does; the AML Editor itself stays English. The environment variable `AMLFPB_LANGUAGE` (`en` or `de`) overrides it, for screenshots and support. The diagram of FPB.js follows: the plugin opens its page with `?lang=de` or `?lang=en`. The messages of the mapper, of the OCL rule file and of the log file stay English, as does the conformance report.
+
 ## License
 
 [MIT](LICENSE).
