@@ -134,6 +134,32 @@ public class LocalizationTests
         Assert.Empty(bypassing);
     }
 
+    // final review of F2: text as the content of an element, and texts set in
+    // code on controls or as the title of a message box, went past the checks
+    [Fact]
+    public void No_XAML_element_text_goes_past_the_translation()
+    {
+        var bypassing = SourceFiles(".xaml")
+            .SelectMany(f => Regex.Matches(Regex.Replace(File.ReadAllText(f), @"<!--.*?-->", "", RegexOptions.Singleline), @">\s*([^<{\s][^<]*)<")
+                .Select(m => (File: Path.GetFileName(f), Text: m.Groups[1].Value.Trim())))
+            .Where(t => Regex.IsMatch(System.Net.WebUtility.HtmlDecode(t.Text), @"[A-Za-zÄÖÜäöü]{2,}"))
+            .Select(t => $"{t.File}: {t.Text}");
+
+        Assert.Empty(bypassing);
+    }
+
+    [Fact]
+    public void No_text_set_in_code_goes_past_the_translation()
+    {
+        var bypassing = SourceFiles(".cs")
+            .SelectMany(f => File.ReadAllLines(f).Select(line => (File: Path.GetFileName(f), Line: line.Trim())))
+            .Where(l => Regex.IsMatch(l.Line, @"\.(Text|Content|ToolTip|Header|Title)\s*=\s*\$?""[^""]*[A-Za-zÄÖÜäöü]{2,}")
+                        || Regex.IsMatch(l.Line, @"MessageBox\.Show\([^,]+,\s*\$?""[^""]*[A-Za-zÄÖÜäöü]{2,}"))
+            .Select(l => $"{l.File}: {l.Line}");
+
+        Assert.Empty(bypassing);
+    }
+
     [Fact]
     public void Every_German_text_keeps_the_placeholders_of_its_key()
     {

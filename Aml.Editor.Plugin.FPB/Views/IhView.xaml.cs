@@ -1121,14 +1121,14 @@ public partial class IhView : UserControl, IDisposable
 
         if (rows.Count == 0)
         {
-            FindingsSummary.Text = " — no findings";
+            FindingsSummary.Text = L.T(" — no findings");
         }
         else
         {
             var e = rows.Count(r => r.SeverityRank == 0);
             var w = rows.Count(r => r.SeverityRank == 1);
             var i = rows.Count(r => r.SeverityRank == 2);
-            FindingsSummary.Text = $" — {e} error · {w} warning · {i} info";
+            FindingsSummary.Text = L.T(" — {0} error · {1} warning · {2} info", e, w, i);
         }
     }
 

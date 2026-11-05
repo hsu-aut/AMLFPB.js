@@ -34,9 +34,8 @@
                                    FontSize="13"
                                    TextAlignment="Center"
                                    TextWrapping="Wrap"
-                                   MaxWidth="500">
-                            Open an AML document with at least one InstanceHierarchy that contains an FPD_Process. Each FPD-bearing InstanceHierarchy will appear as its own tab here.
-                        </TextBlock>
+                                   MaxWidth="500"
+                                   Text="{l:T 'Open an AML document with at least one InstanceHierarchy that contains an FPD_Process. Each FPD-bearing InstanceHierarchy will appear as its own tab here.'}"/>
                         <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,0">
                             <Button x:Name="PlaceholderNewProcessButton"
                                     Content="{l:T 'New Process'}"

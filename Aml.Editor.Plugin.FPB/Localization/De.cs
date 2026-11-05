@@ -11,6 +11,7 @@ public static class De
     {
         // --- the tab of the plugin (FpbPlugin.xaml) ---
         ["FPB.js Viewer"] = "FPB.js-Ansicht",
+        ["Open an AML document with at least one InstanceHierarchy that contains an FPD_Process. Each FPD-bearing InstanceHierarchy will appear as its own tab here."] = "Öffne ein AML-Dokument mit mindestens einer InstanceHierarchy, die einen FPD_Process enthält. Jede InstanceHierarchy mit FPD bekommt hier einen eigenen Reiter.",
         ["New Process"] = "Neuer Prozess",
         ["Create an empty FPD InstanceHierarchy in the current AML document."] = "Legt im aktuellen AML-Dokument eine leere FPD-InstanceHierarchy an.",
         ["Import FPB.js JSON..."] = "FPB.js-JSON importieren …",
@@ -62,7 +63,8 @@ public static class De
         ["Refresh from AML"] = "Aus AML neu laden",
         ["Loading FPB.js viewer…"] = "Die FPB.js-Ansicht wird geladen…",
         ["VDI 3682 Findings"] = "Befunde nach VDI 3682",
-        [" — no findings"] = ": keine Befunde",
+        [" — no findings"] = "(keine Befunde)",
+        [" — {0} error · {1} warning · {2} info"] = "(Fehler: {0} · Warnungen: {1} · Hinweise: {2})",
         ["Rule"] = "Regel",
         ["Element"] = "Element",
         ["Layer"] = "Ebene",
