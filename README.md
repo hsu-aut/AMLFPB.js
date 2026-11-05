@@ -40,6 +40,7 @@ After installation, open any AML document with FPD content, or use **New Process
 - Changes in the AML tree are picked up by the viewer automatically after a few seconds. **Refresh** forces an immediate refresh.
 - If the AML tree changes while the diagram has buffered changes, nothing is dropped: a bar above the diagram asks whether to **Apply diagram** (the diagram wins where both changed the same element) or **Reload from AML** (the diagram changes go, a backup stays in `%TEMP%\fpb-plugin\pending-backup`).
 - With the focus in the diagram, its shortcuts (`Ctrl+Z`, `Ctrl+Y`, `Delete`, `Ctrl+C`, `Ctrl+V`, `Ctrl+F`, ...) act in the diagram only; the editor does not undo, delete or copy anything in the tree.
+- Deleting an element that other parts of the AML file link to (a plant hierarchy, a link drawn in the editor, a link stored in the element that points outside) asks first and names those links: applying the diagram removes them. The list follows the whole file within a few seconds. A port that such a link shares with a flow stays when only the flow is deleted.
 - **Export** in the FPB.js toolbar saves the diagram as JSON, VDI 3682 XML, SVG, PNG or PDF through the Windows save dialog. Links in the FPB.js information dialog open in the default browser.
 - **View only** in the toolbar locks the diagrams of all tabs: zoom, pan, switch layers, search, check and export still work, but nothing can be moved, created, renamed or deleted. Click it again to edit. The plugin remembers the choice.
 
