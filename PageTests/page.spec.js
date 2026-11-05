@@ -231,3 +231,14 @@ test('setAmlLinks from the plugin makes the delete question name the links', asy
   await question.locator('[data-answer="cancel"]').click();
   expect(await page.evaluate((id) => !!window.fpb.get('elementRegistry').get(id), PRUEFEN)).toBe(true);
 });
+
+// 016h F2: the plugin tells the page its language in the address
+test('the page speaks German with ?lang=de and English without', async ({ page }) => {
+  const { errors } = await openPluginPage(page, '?lang=de');
+  await expect(page.locator('#exportButton')).toHaveAttribute('aria-label', 'Exportieren');
+  expect(await page.evaluate(() => window.fpb.getLanguage())).toBe('de');
+  await openPluginPage(page);
+  await expect(page.locator('#exportButton')).toHaveAttribute('aria-label', 'Export');
+  expect(await page.evaluate(() => window.fpb.getLanguage())).toBe('en');
+  expect(errors).toEqual([]);
+});

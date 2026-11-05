@@ -1,3 +1,4 @@
+using Aml.Editor.Plugin.FPB.Localization;
 using System.Diagnostics;
 using System.IO;
 using System.Reflection;
@@ -145,13 +146,16 @@ public sealed class FpbWebView : IDisposable
         _view.CoreWebView2.ProcessFailed += _processFailedHandler;
 
         _navStarted = true;
-        _view.CoreWebView2.Navigate($"{BridgePolicy.Origin}/index.html");
+        _view.CoreWebView2.Navigate(BridgePolicy.PageUrl(L.German));
     }
 
     private static Task<CoreWebView2Environment> SharedEnvironmentAsync()
     {
         if (s_environment is { IsFaulted: false, IsCanceled: false } existing) return existing;
-        s_environment = CoreWebView2Environment.CreateAsync(null, BridgePolicy.UserDataFolder());
+        // the menus of WebView2 itself speak the language of the plugin (016h F2);
+        // the profile folder is the plugin's own, so no other plugin shares these options
+        s_environment = CoreWebView2Environment.CreateAsync(null, BridgePolicy.UserDataFolder(),
+            new CoreWebView2EnvironmentOptions { Language = L.Language });
         return s_environment;
     }
 

@@ -141,7 +141,9 @@
         files: false,
         startCard: false,
         // the findings stand in the list of the plugin
-        validation: { list: false }
+        validation: { list: false },
+        // the language of the plugin, from the address (016h F2); without it English
+        language: new URLSearchParams(window.location.search).get('lang') || 'en'
       });
       // for the DevTools and the page tests
       window.fpb = fpb;

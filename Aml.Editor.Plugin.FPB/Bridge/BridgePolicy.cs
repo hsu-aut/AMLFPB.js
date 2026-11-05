@@ -33,6 +33,12 @@ public static class BridgePolicy
         return parsed.Scheme is "http" or "https" or "mailto" ? NavigationAction.External : NavigationAction.Block;
     }
 
+    /// <summary>
+    /// The address of the plugin page; it tells the page the language of the
+    /// plugin, which the page passes to FPB.js (016h F2).
+    /// </summary>
+    public static string PageUrl(bool german) => Origin + "/index.html?lang=" + (german ? "de" : "en");
+
     /// <summary>True for a message of the plugin page (CoreWebView2WebMessageReceivedEventArgs.Source).</summary>
     public static bool IsOwnSource(string? source) =>
         !string.IsNullOrEmpty(source) && Uri.TryCreate(source, UriKind.Absolute, out var parsed) && IsOwn(parsed);

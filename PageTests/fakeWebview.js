@@ -53,7 +53,7 @@ async function installFakeWebview(page) {
  * Open the page on its virtual host. Returns the requests and page errors
  * seen, so tests can check what was loaded and that nothing blew up.
  */
-async function openPluginPage(page) {
+async function openPluginPage(page, query = '') {
   const requests = [];
   const errors = [];
   page.on('pageerror', (error) => errors.push(String((error && error.message) || error)));
@@ -71,7 +71,7 @@ async function openPluginPage(page) {
       body: fs.readFileSync(file)
     });
   });
-  await page.goto(ORIGIN + '/index.html');
+  await page.goto(ORIGIN + '/index.html' + query);
   await page.waitForFunction(() => window.__posted.some((m) => m.type === 'ready'));
   return { requests, errors };
 }

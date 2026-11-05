@@ -53,4 +53,14 @@ public class BridgePolicyTests
     {
         Assert.Equal(expected, BridgePolicy.SaveFilterFor(fileName));
     }
+
+    // 016h F2: the page learns the language of the plugin from its address
+    [Fact]
+    public void The_page_learns_the_language_from_its_address()
+    {
+        Assert.Equal("https://fpbjs.local/index.html?lang=de", BridgePolicy.PageUrl(true));
+        Assert.Equal("https://fpbjs.local/index.html?lang=en", BridgePolicy.PageUrl(false));
+        Assert.True(BridgePolicy.IsOwnSource(BridgePolicy.PageUrl(true)));
+        Assert.Equal(NavigationAction.Allow, BridgePolicy.Classify(BridgePolicy.PageUrl(true)));
+    }
 }
