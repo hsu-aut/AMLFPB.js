@@ -155,11 +155,13 @@ public static class Vdi3682OclRuleSet
             if (!model.InstancesOf("FPD_Process").Any()) return;
 
             var (validator, rules) = Compiled.Value;
+            var names = NamesById(doc);
 
             foreach (var f in validator.Validate(model, rules))
             {
                 if (options.IsRuleDisabled(f.RuleId)) continue;
-                findings.Add(new ValidationFinding(f.RuleId, Convert(f.Severity), f.Message, f.TargetId));
+                var label = f.TargetId is { } id && names.TryGetValue(id.Trim().TrimStart('{').TrimEnd('}'), out var name) ? name : (f.TargetId ?? "");
+                findings.Add(Finding(f.RuleId, Convert(f.Severity), label, f.TargetId));
             }
 
             // Silent-pass guard: an element inside an FPD process that the type
@@ -194,6 +196,64 @@ public static class Vdi3682OclRuleSet
             current = current.CAEXParent as InternalElementType;
         }
         return false;
+    }
+
+    /// <summary>
+    /// A finding of an OCL invariant as a sentence in the language of the
+    /// plugin (031 V7), not the engine's "violates X". The templates are
+    /// literal so the completeness test of the German texts finds them.
+    /// </summary>
+    public static ValidationFinding Finding(string ruleId, ValidationSeverity severity, string label, string? target)
+    {
+        var args = new object?[] { label };
+        return (ruleId.StartsWith(RuleIdPrefix, StringComparison.Ordinal) ? ruleId[RuleIdPrefix.Length..] : ruleId) switch
+        {
+            "ProjectMinimumProcess" => ValidationFinding.Of(ruleId, severity, "The project '{0}' has no process.", args, target),
+            "SystemLimitCardinality" => ValidationFinding.Of(ruleId, severity, "Process '{0}' does not have exactly one system limit.", args, target),
+            "StateMinimumCardinality" => ValidationFinding.Of(ruleId, severity, "Process '{0}' has fewer than two states.", args, target),
+            "ProcessOperatorMinimumCardinality" => ValidationFinding.Of(ruleId, severity, "Process '{0}' has no process operator.", args, target),
+            "FlowEndpointsTyped" => ValidationFinding.Of(ruleId, severity, "Flow '{0}' does not connect a state with a process operator.", args, target),
+            "NoStateToStateFlow" => ValidationFinding.Of(ruleId, severity, "Flow '{0}' connects two states.", args, target),
+            "NoProcessOperatorToProcessOperatorFlow" => ValidationFinding.Of(ruleId, severity, "Flow '{0}' connects two process operators.", args, target),
+            "UsageEndpointsTyped" => ValidationFinding.Of(ruleId, severity, "Usage '{0}' does not connect a process operator with a technical resource.", args, target),
+            "NoDuplicateConnections" => ValidationFinding.Of(ruleId, severity, "Process '{0}' has duplicate connections.", args, target),
+            "FlowDirected" => ValidationFinding.Of(ruleId, severity, "Flow '{0}' does not run from an output to an input.", args, target),
+            "NoMixedFlowTypes" => ValidationFinding.Of(ruleId, severity, "Process operator '{0}' mixes a normal flow with parallel or alternative flows.", args, target),
+            "UniqueIdentifiers" => ValidationFinding.Of(ruleId, severity, "Several elements of '{0}' share a unique ID.", args, target),
+            "ProcessNamed" => ValidationFinding.Of(ruleId, severity, "Process '{0}' has no name.", args, target),
+            "LongNameMandatory" => ValidationFinding.Of(ruleId, severity, "Element '{0}' has no name.", args, target),
+            "VersionRevisionPresent" => ValidationFinding.Of(ruleId, severity, "Element '{0}' has no version or revision number.", args, target),
+            "RefObjResolvable" => ValidationFinding.Of(ruleId, severity, "Element '{0}' refers with refObj to an element that does not exist.", args, target),
+            "RefProcessResolvable" => ValidationFinding.Of(ruleId, severity, "Process operator '{0}' refers to a decomposition that does not exist.", args, target),
+            "AllReferencesResolvable" => ValidationFinding.Of(ruleId, severity, "Element '{0}' has a reference that does not resolve.", args, target),
+            "ProcessOperatorHasIO" => ValidationFinding.Of(ruleId, severity, "Process operator '{0}' lacks an input or an output.", args, target),
+            "StateHasConcreteType" => ValidationFinding.Of(ruleId, severity, "State '{0}' is neither a product, an energy nor an information.", args, target),
+            "NoSelfReference" => ValidationFinding.Of(ruleId, severity, "Connection '{0}' connects an element with itself.", args, target),
+            "NoOrphanedElements" => ValidationFinding.Of(ruleId, severity, "Element '{0}' is not connected.", args, target),
+            "SourceTargetSameProcess" => ValidationFinding.Of(ruleId, severity, "Connection '{0}' joins elements of two processes.", args, target),
+            var other => ValidationFinding.Of(ruleId, severity, "Element '{0}' breaks rule {1}.", new object?[] { label, other }, target),
+        };
+    }
+
+    /// <summary>Names of the elements and links of the document by their bare ID, for the sentences above.</summary>
+    private static Dictionary<string, string> NamesById(CAEXDocument doc)
+    {
+        var names = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        void Walk(IEnumerable<InternalElementType> elements)
+        {
+            foreach (var ie in elements)
+            {
+                if (!string.IsNullOrEmpty(ie.ID) && !string.IsNullOrEmpty(ie.Name))
+                    names.TryAdd(ie.ID.Trim().TrimStart('{').TrimEnd('}'), ie.Name);
+                foreach (var link in ie.InternalLink)
+                    if (!string.IsNullOrEmpty(link.ID) && !string.IsNullOrEmpty(link.Name))
+                        names.TryAdd(link.ID.Trim().TrimStart('{').TrimEnd('}'), link.Name);
+                Walk(ie.InternalElement);
+            }
+        }
+        foreach (var ih in doc.CAEXFile?.InstanceHierarchy ?? Enumerable.Empty<InstanceHierarchyType>())
+            Walk(ih.InternalElement);
+        return names;
     }
 
     private static ValidationSeverity Convert(Ocl.ValidationSeverity severity) => severity switch

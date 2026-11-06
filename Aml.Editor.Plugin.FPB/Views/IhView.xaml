@@ -274,7 +274,7 @@
                             </DataTemplate>
                         </DataGridTemplateColumn.CellTemplate>
                     </DataGridTemplateColumn>
-                    <DataGridTextColumn Header="{l:T 'Rule'}" Binding="{Binding RuleId}" Width="220"/>
+                    <DataGridTextColumn Header="{l:T 'Rule'}" Binding="{Binding Rule}" Width="70"/>
                     <DataGridTextColumn Header="{l:T 'Element'}" Binding="{Binding ElementLabel}" Width="160"/>
                     <DataGridTextColumn Header="{l:T 'Layer'}" Binding="{Binding Layer}" Width="120"/>
                     <DataGridTextColumn Header="{l:T 'Message'}" Binding="{Binding Message}" Width="*"/>

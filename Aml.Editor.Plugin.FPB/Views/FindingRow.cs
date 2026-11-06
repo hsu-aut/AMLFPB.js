@@ -16,6 +16,9 @@ public sealed class FindingRow
     private FindingRow() { }
 
     public string RuleId { get; private init; } = "";
+
+    /// <summary>The code of the rule in the catalog (031), else its id.</summary>
+    public string Rule => CatalogueCodes.CodeOf(RuleId) ?? RuleId;
     public string Message { get; private init; } = "";
     public string ElementId { get; private init; } = "";
     public string ElementLabel { get; private init; } = "";

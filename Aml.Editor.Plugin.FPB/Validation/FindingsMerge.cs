@@ -37,7 +37,7 @@ public static class FindingsMerge
         Func<string, TargetPlace> place)
     {
         var merged = new List<MergedFinding>();
-        foreach (var finding in plugin)
+        foreach (var finding in MostSpecific(plugin))
         {
             var target = Bare(finding.TargetIeId);
             if (target.Length > 0)
@@ -52,6 +52,23 @@ public static class FindingsMerge
         }
         merged.AddRange(page.Select(p => new MergedFinding(null, p)));
         return merged;
+    }
+
+    // C2, C3 and C4 are special cases of C1; OCL reports both for one connection
+    private static readonly HashSet<string> SpecialisesC1 = new(StringComparer.Ordinal) { "C2", "C3", "C4" };
+
+    /// <summary>
+    /// One finding per element and cause (031 V5): of C1 and a more precise
+    /// C2, C3 or C4 for the same connection only the precise one stays.
+    /// </summary>
+    public static List<ValidationFinding> MostSpecific(IEnumerable<ValidationFinding> findings)
+    {
+        var list = findings.ToList();
+        var precise = list
+            .Where(f => CatalogueCodes.CodeOf(f.RuleId) is { } code && SpecialisesC1.Contains(code))
+            .Select(f => Bare(f.TargetIeId))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return list.Where(f => !(CatalogueCodes.CodeOf(f.RuleId) == "C1" && precise.Contains(Bare(f.TargetIeId)))).ToList();
     }
 
     private static string Bare(string? id) => (id ?? "").Trim().TrimStart('{').TrimEnd('}');
