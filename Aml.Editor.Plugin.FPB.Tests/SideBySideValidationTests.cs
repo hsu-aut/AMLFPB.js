@@ -83,8 +83,11 @@ public class SideBySideValidationTests
 
         // Duplicate uniqueIdent — covered ONLY by the OCL catalogue rule D1, no
         // hard-coded rule checks it. The default validator pass must report it.
+        // two operators: D1 compares states, operators and resources (031), not
+        // the system limit or a copy of a boundary state
         var elements = AllIes(doc)
-            .Where(ie => ie.Attribute["Identification"]?.Attribute["uniqueIdent"] is not null)
+            .Where(ie => (ie.RefBaseSystemUnitPath?.EndsWith("FPD_ProcessOperator") ?? false)
+                         && ie.Attribute["Identification"]?.Attribute["uniqueIdent"] is not null)
             .Take(2).ToList();
         Assert.Equal(2, elements.Count);
         foreach (var ie in elements)

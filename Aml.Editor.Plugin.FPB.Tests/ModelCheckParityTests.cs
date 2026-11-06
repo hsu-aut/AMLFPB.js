@@ -1,10 +1,14 @@
 // 031 V8: the OCL rules of the plugin give the same verdict as the model check
 // of FPB.js on the corpus FPB.JS/tests/fixtures/model-check (the FPB.js side:
 // tests/e2e/model-check-parity.spec.js there). Compared are the rules a case
-// names, as pairs of rule and element: D8 per element, A2 to A4 by the name of
-// the process, D1 only whether it is broken; one finding per element and cause.
+// names, as pairs of rule and element as the diagram knows them (FpdElementIndex:
+// the copy of a boundary state is its state, a process has the id of its
+// operator); one finding per element and cause. A finding of a compared rule
+// that lies in the hierarchy but on no element of the diagram fails the test
+// (final review of 031: the links from outside were skipped that way).
 
 using System.Text.Json;
+using Aml.Editor.Plugin.FPB.Bridge;
 using Aml.Editor.Plugin.FPB.Validation;
 using Aml.Engine.CAEX;
 using Xunit;
@@ -36,16 +40,16 @@ public class ModelCheckParityTests
     private static string Key(string rule, string? element, string? process) =>
         rule + " " + (process != null ? "process:" + process : element);
 
-    /// <summary>Bare ID to name of every element and link of one hierarchy.</summary>
-    private static Dictionary<string, string> Members(InstanceHierarchyType ih)
+    /// <summary>What a finding of OCL may name in one hierarchy: element and link IDs, the names of links without one.</summary>
+    private static HashSet<string> Members(InstanceHierarchyType ih)
     {
-        var members = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var members = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         void Walk(IEnumerable<InternalElementType> elements)
         {
             foreach (var ie in elements)
             {
-                members.TryAdd(Bare(ie.ID), ie.Name ?? "");
-                foreach (var link in ie.InternalLink) members.TryAdd(Bare(link.ID), link.Name ?? "");
+                members.Add(Bare(ie.ID));
+                foreach (var link in ie.InternalLink) members.Add(Bare(link.ID) is { Length: > 0 } id ? id : link.Name ?? "");
                 Walk(ie.InternalElement);
             }
         }
@@ -60,17 +64,22 @@ public class ModelCheckParityTests
         var root = FpbJs();
         var expected = JsonSerializer.Deserialize<Expected>(File.ReadAllText(Path.Combine(root, "tests", "fixtures", "model-check", name + ".expected.json")))!;
         var doc = CAEXDocument.LoadFromFile(Path.Combine(root, expected.aml));
-        var members = Members(doc.CAEXFile.InstanceHierarchy.First(ih => ih.Name == expected.hierarchy));
+        var ih = doc.CAEXFile.InstanceHierarchy.First(h => h.Name == expected.hierarchy);
+        var members = Members(ih);
+        var index = FpdElementIndex.Build(ih);
 
         var got = new HashSet<string>();
+        var unplaced = new List<string>();
         foreach (var f in FindingsMerge.MostSpecific(Vdi3682Validator.ValidateStructured(doc)))
         {
             if (CatalogueCodes.CodeOf(f.RuleId) is not { } code || !expected.rules.Contains(code)) continue;
-            if (code == "D1") { got.Add(Key("D1", "*", null)); continue; }
-            if (!members.TryGetValue(Bare(f.TargetIeId), out var targetName)) continue;
-            got.Add(code is "A2" or "A3" or "A4" ? Key(code, null, targetName) : Key(code, Bare(f.TargetIeId), null));
+            var target = Bare(f.TargetIeId);
+            if (!members.Contains(target)) continue;                      // another hierarchy of the file
+            if (!index.TryGetFpb(target, out var fpbId, out var processId)) { unplaced.Add(code + " " + f.Message); continue; }
+            got.Add(code is "A2" or "A3" or "A4" ? Key(code, null, processId) : Key(code, fpbId, null));
         }
 
+        Assert.Empty(unplaced);
         Assert.Equal(expected.findings.Select(i => Key(i.rule, i.element, i.process)).Order(), got.Order());
     }
 }

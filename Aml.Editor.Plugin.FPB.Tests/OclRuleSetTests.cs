@@ -96,6 +96,34 @@ public class OclRuleSetTests
         Assert.DoesNotContain(Check(doc), f => f.RuleId == "VDI3682.OCL.SourceTargetSameProcess");
     }
 
+    // final review of 031: the links from outside (016f E4) became C1 once the
+    // endpoint rules ran again; they are references, not flows
+    [Fact]
+    public void A_link_to_an_element_outside_the_FPD_is_no_flow_finding_at_all()
+    {
+        var doc = CAEXDocument.LoadFromFile(MixedAml());
+
+        var onLinks = Check(doc).Where(f => f.TargetIeId is "VentilToPressureCtl" or "PlatteToTempSensor"
+            || (f.Message?.Contains("VentilToPressureCtl") ?? false) || (f.Message?.Contains("PlatteToTempSensor") ?? false));
+
+        Assert.Empty(onLinks.Select(f => f.RuleId + ": " + f.Message));
+    }
+
+    // final review of 031: D1 pointed at the project, so the list kept it beside the D1 of FPB.js
+    [Fact]
+    public void D1_points_at_each_element_that_shares_the_ID()
+    {
+        var doc = Temperieren(m =>
+        {
+            Data(m, Erhitzen)["identification"]!["uniqueIdent"] = "DUP-1";
+            Data(m, Pruefen)["identification"]!["uniqueIdent"] = "DUP-1";
+        });
+
+        var d1 = Check(doc).Where(f => f.RuleId == "VDI3682.OCL.UniqueIdentifiers").Select(f => Bare(f.TargetIeId)).Order().ToArray();
+
+        Assert.Equal(new[] { Pruefen, Erhitzen }.Order().ToArray(), d1);
+    }
+
     [Fact]
     public void A_link_between_FPD_elements_of_two_processes_is_still_I3()
     {
@@ -114,13 +142,16 @@ public class OclRuleSetTests
     }
 
     [Fact]
-    public void An_empty_process_gets_no_A3_or_A4()
+    public void An_empty_process_gets_no_A2_A3_or_A4()
     {
         var doc = Temperieren();
-        FpbJsonToCaex.CreateEmptyFpdInstanceHierarchy(doc, "Empty_IH", "Empty");
+        var ih = FpbJsonToCaex.CreateEmptyFpdInstanceHierarchy(doc, "Empty_IH", "Empty");
+        // final review of 031: an empty process without a system limit (Showcase B, C) got A2 in the report
+        foreach (var sl in All(ih.InternalElement).Where(ie => ie.RefBaseSystemUnitPath?.EndsWith("FPD_SystemLimit") ?? false).ToList())
+            sl.Remove();
 
         Assert.DoesNotContain(Check(doc), f => f.RuleId is "VDI3682.OCL.StateMinimumCardinality" or "VDI3682.OCL.ProcessOperatorMinimumCardinality"
-            or "VDI3682.StateCardinality" or "VDI3682.ProcessOperatorCardinality");
+            or "VDI3682.OCL.SystemLimitCardinality");
     }
 
     [Fact]
