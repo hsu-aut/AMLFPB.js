@@ -145,6 +145,8 @@
         // the language of the plugin, from the address (016h F2); without it English
         language: new URLSearchParams(window.location.search).get('lang') || 'en'
       });
+      // the page speaks the language of FPB.js, also for screen readers
+      document.documentElement.lang = fpb.getLanguage();
       // for the DevTools and the page tests
       window.fpb = fpb;
     } catch (err) {

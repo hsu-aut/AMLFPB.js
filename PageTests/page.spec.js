@@ -242,3 +242,11 @@ test('the page speaks German with ?lang=de and English without', async ({ page }
   expect(await page.evaluate(() => window.fpb.getLanguage())).toBe('en');
   expect(errors).toEqual([]);
 });
+
+// run in the real editor: the page itself said "en" while FPB.js spoke German
+test('the page names its language for screen readers', async ({ page }) => {
+  await openPluginPage(page, '?lang=de');
+  await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+  await openPluginPage(page);
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en');
+});
