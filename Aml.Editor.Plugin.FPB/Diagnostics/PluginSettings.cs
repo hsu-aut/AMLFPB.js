@@ -36,7 +36,7 @@ public sealed class PluginSettings
 
     /// <summary>
     /// VDI 3682 validator rule IDs the user has switched off (matching
-    /// <c>IValidationRule.Id</c>, e.g. <c>"VDI3682.ProcessOperatorIdentification"</c>).
+    /// <c>IValidationRule.Id</c>, e.g. <c>"VDI3682.InternalLinkInterface"</c>).
     /// </summary>
     [JsonPropertyName("disabled_validation_rules")] public List<string> DisabledValidationRuleIds { get; set; } = new();
 

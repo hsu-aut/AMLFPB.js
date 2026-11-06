@@ -19,13 +19,9 @@ public class ValidationPipelineTests
     public void DefaultRules_HaveStableIds()
     {
         var ids = Vdi3682Validator.DefaultRules.Select(r => r.Id).ToList();
-        Assert.Contains("VDI3682.SystemLimitCardinality", ids);
-        Assert.Contains("VDI3682.StateCardinality", ids);
-        Assert.Contains("VDI3682.ProcessOperatorCardinality", ids);
-        Assert.Contains("VDI3682.ProcessOperatorIdentification", ids);
+        // 031: only what AML has alone; the model rules run in FPB.js and OCL
         Assert.Contains("VDI3682.RefObjIntegrity", ids);
         Assert.Contains("VDI3682.InternalLinkInterface", ids);
-        Assert.Contains("VDI3682.FlowEndpointTyping", ids);
         Assert.Equal(ids.Distinct().Count(), ids.Count); // no dupes
     }
 
@@ -36,13 +32,14 @@ public class ValidationPipelineTests
         var allFindings = Vdi3682Validator.ValidateStructured(doc);
         var disabled = new ValidationOptions
         {
-            DisabledRuleIds = new HashSet<string> { "VDI3682.ProcessOperatorIdentification" },
+            DisabledRuleIds = new HashSet<string> { "VDI3682.OCL.VersionRevisionPresent" },
         };
         var fewer = Vdi3682Validator.ValidateStructured(doc, disabled);
 
-        Assert.DoesNotContain(fewer, f => f.RuleId == "VDI3682.ProcessOperatorIdentification");
+        Assert.Contains(allFindings, f => f.RuleId == "VDI3682.OCL.VersionRevisionPresent");
+        Assert.DoesNotContain(fewer, f => f.RuleId == "VDI3682.OCL.VersionRevisionPresent");
         // Other findings (if any) remain.
-        var otherRuleIds = allFindings.Where(f => f.RuleId != "VDI3682.ProcessOperatorIdentification").Select(f => f.RuleId).Distinct().ToList();
+        var otherRuleIds = allFindings.Where(f => f.RuleId != "VDI3682.OCL.VersionRevisionPresent").Select(f => f.RuleId).Distinct().ToList();
         foreach (var rid in otherRuleIds)
             Assert.Contains(fewer, f => f.RuleId == rid);
     }

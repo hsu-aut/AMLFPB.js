@@ -19,19 +19,13 @@ namespace Aml.Editor.Plugin.FPB.Validation;
 public static class Vdi3682Validator
 {
     /// <summary>
-    /// The rule set applied on a normal Validate() call. Order is irrelevant
-    /// because each rule appends its own findings to the list; we keep
-    /// cardinality checks first because they tend to subsume related failures.
+    /// The rule set applied on a normal Validate() call: only what exists in
+    /// AML alone (031). The rules on the model run in FPB.js and in OCL.
     /// </summary>
     public static readonly IReadOnlyList<IValidationRule> DefaultRules = new IValidationRule[]
     {
-        new SystemLimitCardinalityRule(),
-        new StateCardinalityRule(),
-        new ProcessOperatorCardinalityRule(),
-        new ProcessOperatorIdentificationRule(),
         new RefObjIntegrityRule(),
         new InternalLinkInterfaceRule(),
-        new FlowEndpointTypingRule(),
     };
 
     /// <summary>Structured pass over the document. Use this for CI / programmatic consumers.</summary>

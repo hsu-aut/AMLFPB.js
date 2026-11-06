@@ -183,22 +183,25 @@
       "catalog_id": "D3",
       "title": "PO benannt",
       "category": "Identity",
-      "ocl_constraint": "ProcessOperatorNamed",
-      "bucket": "PURE_OCL_LIVE"
+      "ocl_constraint": "LongNameMandatory",
+      "bucket": "PURE_OCL_LIVE",
+      "note": "in D7 aufgegangen (031)"
     },
     {
       "catalog_id": "D4",
       "title": "State benannt",
       "category": "Identity",
-      "ocl_constraint": "StateNamed",
-      "bucket": "PURE_OCL_LIVE"
+      "ocl_constraint": "LongNameMandatory",
+      "bucket": "PURE_OCL_LIVE",
+      "note": "in D7 aufgegangen (031)"
     },
     {
       "catalog_id": "D5",
       "title": "TR benannt",
       "category": "Identity",
-      "ocl_constraint": "TechnicalResourceNamed",
-      "bucket": "PURE_OCL_LIVE"
+      "ocl_constraint": "LongNameMandatory",
+      "bucket": "PURE_OCL_LIVE",
+      "note": "in D7 aufgegangen (031)"
     },
     {
       "catalog_id": "D6",

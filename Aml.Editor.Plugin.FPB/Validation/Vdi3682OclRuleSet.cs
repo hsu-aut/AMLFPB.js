@@ -40,9 +40,6 @@ public static class Vdi3682OclRuleSet
         ["FlowDirected"] = Ocl.ValidationSeverity.Error,                           // C6
         ["NoMixedFlowTypes"] = Ocl.ValidationSeverity.Warning,                     // C9
         ["UniqueIdentifiers"] = Ocl.ValidationSeverity.Error,                      // D1
-        ["ProcessOperatorNamed"] = Ocl.ValidationSeverity.Info,                    // D3
-        ["StateNamed"] = Ocl.ValidationSeverity.Info,                              // D4
-        ["TechnicalResourceNamed"] = Ocl.ValidationSeverity.Info,                  // D5
         ["ProcessNamed"] = Ocl.ValidationSeverity.Warning,                         // D6
         // D7: Warning, nicht Error — die OCL-Regel hat jetzt einen Namens-Fallback,
         // aber ein Element ganz ohne Namen soll die Demo nicht rot fluten.
@@ -63,12 +60,6 @@ public static class Vdi3682OclRuleSet
     /// <summary>Invariants whose ground the hard-coded rules already check (skipped at runtime to avoid double findings).</summary>
     private static readonly HashSet<string> CoveredByHardcoded = new(StringComparer.Ordinal)
     {
-        "SystemLimitCardinality",              // VDI3682.SystemLimitCardinality
-        "StateMinimumCardinality",             // VDI3682.StateCardinality
-        "ProcessOperatorMinimumCardinality",   // VDI3682.ProcessOperatorCardinality
-        "ProcessOperatorNamed",                // VDI3682.ProcessOperatorIdentification
-        "FlowEndpointsTyped",                  // VDI3682.FlowEndpointTyping
-        "UsageEndpointsTyped",                 // VDI3682.FlowEndpointTyping
         "FlowDirected",                        // VDI3682.InternalLinkInterface (FlowOut/FlowIn-Paarung über kanonische Pfade)
     };
 

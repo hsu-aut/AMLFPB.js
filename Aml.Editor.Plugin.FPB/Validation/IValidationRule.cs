@@ -64,7 +64,7 @@ public sealed class ValidationFinding
 /// </summary>
 public interface IValidationRule
 {
-    /// <summary>Short identifier used in log messages, e.g. <c>"VDI3682.SystemLimitCardinality"</c>.</summary>
+    /// <summary>Short identifier used in log messages, e.g. <c>"VDI3682.InternalLinkInterface"</c>.</summary>
     string Id { get; }
 
     void Validate(CAEXDocument doc, ValidationContext context, List<ValidationFinding> findings);

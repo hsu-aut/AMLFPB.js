@@ -124,13 +124,6 @@ public static class De
         ["Process '{0}': link '{1}' has no resolvable A-/B-interface."] = "Prozess '{0}': Link '{1}' hat keine auflösbare Schnittstelle A oder B.",
         ["Process '{0}': link '{1}' uses unknown source interface '{2}'."] = "Prozess '{0}': Link '{1}' nutzt die unbekannte Quellschnittstelle '{2}'.",
         ["Process '{0}': link '{1}' uses unknown target interface '{2}'."] = "Prozess '{0}': Link '{1}' nutzt die unbekannte Zielschnittstelle '{2}'.",
-        ["Process '{0}': Usage '{1}' connects {2}→{3}, expected PO↔TR."] = "Prozess '{0}': Nutzung '{1}' verbindet {2}→{3}, erwartet PO↔TR.",
-        ["Process '{0}': Flow '{1}' connects {2}→{3}, expected State↔PO."] = "Prozess '{0}': Fluss '{1}' verbindet {2}→{3}, erwartet Zustand↔PO.",
-        ["Process '{0}': missing SystemLimit (VDI 3682 Bild 2: cardinality exactly 1)."] = "Prozess '{0}': Systemgrenze fehlt (VDI 3682 Bild 2: genau eine).",
-        ["Process '{0}': {1} SystemLimits found, expected exactly 1."] = "Prozess '{0}': {1} Systemgrenzen gefunden, erwartet genau eine.",
-        ["Process '{0}': only {1} state(s), expected ≥2 (VDI 3682 Bild 2)."] = "Prozess '{0}': nur {1} Zustand/Zustände, erwartet mindestens 2 (VDI 3682 Bild 2).",
-        ["Process '{0}': no ProcessOperator (VDI 3682 Bild 2: cardinality 1..*)."] = "Prozess '{0}': kein Prozessoperator (VDI 3682 Bild 2: mindestens einer).",
-        ["Process '{0}': ProcessOperator '{1}' has no name/Identification (VDI 3682 Bild 4)."] = "Prozess '{0}': Prozessoperator '{1}' hat weder Namen noch Kennzeichnung (VDI 3682 Bild 4).",
         ["Process '{0}': decomposition reference '{1}' does not resolve to any ProcessOperator (dangling decomposition)."] = "Prozess '{0}': Der Verweis der Dekomposition '{1}' führt zu keinem Prozessoperator (verwaiste Dekomposition).",
     };
 }

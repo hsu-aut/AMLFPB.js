@@ -22,11 +22,11 @@ public class CatalogueCodesTests
     }
 
     [Theory]
-    [InlineData("VDI3682.OCL.StateNamed", "D4")]
+    [InlineData("VDI3682.OCL.LongNameMandatory", "D7")]
     [InlineData("VDI3682.OCL.UniqueIdentifiers", "D1")]
     [InlineData("VDI3682.OCL.NoDuplicateConnections", "C5")]
-    [InlineData("VDI3682.SystemLimitCardinality", "A2")]
-    [InlineData("VDI3682.ProcessOperatorIdentification", "D3")]
+    [InlineData("VDI3682.OCL.SystemLimitCardinality", "A2")]
+    [InlineData("VDI3682.InternalLinkInterface", "C6")]
     [InlineData("VDI3682.RefObjIntegrity", "F1")]
     public void CodeOfNamesTheCatalogRule(string ruleId, string code)
     {

@@ -11,13 +11,7 @@ public static class CatalogueCodes
 {
     private static readonly Dictionary<string, string> Codes = new(StringComparer.Ordinal)
     {
-        // the hard-coded rules (Vdi3682Validator.DefaultRules)
-        ["VDI3682.SystemLimitCardinality"] = "A2",
-        ["VDI3682.StateCardinality"] = "A3",
-        ["VDI3682.ProcessOperatorCardinality"] = "A4",
-        ["VDI3682.ProcessOperatorIdentification"] = "D3",
-        // flows and usages typed: C1 and C4 in one rule
-        ["VDI3682.FlowEndpointTyping"] = "C1",
+        // the hard-coded rules (Vdi3682Validator.DefaultRules): only what AML has alone (031)
         ["VDI3682.InternalLinkInterface"] = "C6",
         ["VDI3682.RefObjIntegrity"] = "F1",
 
@@ -34,9 +28,6 @@ public static class CatalogueCodes
         [Oc("FlowDirected")] = "C6",
         [Oc("NoMixedFlowTypes")] = "C9",
         [Oc("UniqueIdentifiers")] = "D1",
-        [Oc("ProcessOperatorNamed")] = "D3",
-        [Oc("StateNamed")] = "D4",
-        [Oc("TechnicalResourceNamed")] = "D5",
         [Oc("ProcessNamed")] = "D6",
         [Oc("LongNameMandatory")] = "D7",
         [Oc("VersionRevisionPresent")] = "D8",

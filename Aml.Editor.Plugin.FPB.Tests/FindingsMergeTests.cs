@@ -8,7 +8,7 @@ namespace Aml.Editor.Plugin.FPB.Tests;
 
 public class FindingsMergeTests
 {
-    private static readonly ISet<string> FpbChecks = new HashSet<string> { "A2", "B2", "C5", "D3", "D4", "D5", "G4" };
+    private static readonly ISet<string> FpbChecks = new HashSet<string> { "A2", "B2", "C5", "D7", "G4" };
 
     // what the tab knows about the target of a finding of the plugin
     private static Func<string, TargetPlace> Places(params (string Id, TargetPlace Place)[] places)
@@ -28,7 +28,7 @@ public class FindingsMergeTests
     [Fact]
     public void AllFindingsOfFpbJsStay()
     {
-        var merged = Merge(Array.Empty<ValidationFinding>(), new[] { Page("B2", "po1"), Page("D4", "s1") }, Places());
+        var merged = Merge(Array.Empty<ValidationFinding>(), new[] { Page("B2", "po1"), Page("D7", "s1") }, Places());
         Assert.Equal(2, merged.Count);
         Assert.All(merged, m => Assert.NotNull(m.Page));
     }
@@ -37,7 +37,7 @@ public class FindingsMergeTests
     public void ARuleFpbJsChecksOnAnElementOfTheDiagramGoes()
     {
         // A2 at a process the diagram shows: FPB.js decides, also when it reports nothing
-        var merged = Merge(new[] { Plugin("VDI3682.SystemLimitCardinality", "proc1") }, Array.Empty<PageFinding>(),
+        var merged = Merge(new[] { Plugin("VDI3682.OCL.SystemLimitCardinality", "proc1") }, Array.Empty<PageFinding>(),
             Places(("proc1", TargetPlace.InDiagram)));
         Assert.Empty(merged);
     }
@@ -45,7 +45,7 @@ public class FindingsMergeTests
     [Fact]
     public void ARuleFpbJsChecksOnAnObjectTheDiagramDoesNotShowStays()
     {
-        var merged = Merge(new[] { Plugin("VDI3682.SystemLimitCardinality", "hidden"), Plugin("VDI3682.OCL.UniqueIdentifiers", "hidden") },
+        var merged = Merge(new[] { Plugin("VDI3682.OCL.SystemLimitCardinality", "hidden"), Plugin("VDI3682.OCL.UniqueIdentifiers", "hidden") },
             Array.Empty<PageFinding>(), Places(("hidden", TargetPlace.InThisHierarchy)));
         Assert.Equal(2, merged.Count);
     }
@@ -78,7 +78,7 @@ public class FindingsMergeTests
     [Fact]
     public void TargetsWithBracesAreLookedUpWithout()
     {
-        var merged = Merge(new[] { Plugin("VDI3682.OCL.StateNamed", "{s1}") }, Array.Empty<PageFinding>(),
+        var merged = Merge(new[] { Plugin("VDI3682.OCL.LongNameMandatory", "{s1}") }, Array.Empty<PageFinding>(),
             Places(("s1", TargetPlace.InDiagram)));
         Assert.Empty(merged);
     }
