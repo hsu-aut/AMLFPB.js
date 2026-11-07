@@ -29,6 +29,30 @@ public class ListAndReportTests
 
     private static string Bare(string? id) => (id ?? "").Trim().TrimStart('{').TrimEnd('}');
 
+    // 031 run in the real editor: an operator without a name showed its id in the
+    // column "Element"; the web app names such elements by their kind
+    [Fact]
+    public void An_element_without_a_name_is_named_by_its_kind()
+    {
+        var doc = CAEXDocument.LoadFromString(File.ReadAllText(Path.Combine(FpbJs(), "tests", "fixtures", "model-check", "names.aml")));
+        var row = FindingRow.From(new ValidationFinding("VDI3682.OCL.ElementHasName", ValidationSeverity.Warning, "m", "{9833d9a9-1b88-4bfb-91b3-7ab5e2617045}"), doc);
+
+        Assert.Equal("(process operator without a name)", row.ElementLabel);
+        Assert.Equal("(state without a name)", FindingRow.UnnamedLabel("VDI_FPD_SystemUnitClassLib/FPD_Energy"));
+        Assert.Equal("(technical resource without a name)", FindingRow.UnnamedLabel("VDI_FPD_SystemUnitClassLib/FPD_TechnicalResource"));
+        Assert.Equal("(element without a name)", FindingRow.UnnamedLabel("VDI_FPD_SystemUnitClassLib/FPD_SystemLimit"));
+    }
+
+    private static string FpbJs()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            var path = Path.Combine(dir.FullName, "FPB.JS");
+            if (Directory.Exists(Path.Combine(path, "tests", "fixtures", "model-check"))) return path;
+        }
+        throw new DirectoryNotFoundException("FPB.JS/tests/fixtures/model-check was not found above the test folder.");
+    }
+
     [Fact]
     public void The_rule_column_shows_the_catalog_code()
     {

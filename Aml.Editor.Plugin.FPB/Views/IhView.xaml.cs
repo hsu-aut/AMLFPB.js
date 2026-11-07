@@ -1101,6 +1101,7 @@ public partial class IhView : UserControl, IDisposable
         if (string.IsNullOrEmpty(finding.ElementId) || string.IsNullOrEmpty(finding.ProcessId)) return null;
         var objectId = _index.IeIdFor(finding.ElementId, finding.ProcessId);
         var found = objectId != null ? FindObject(objectId) : null;
+        if (found is InternalElementType ie && string.IsNullOrEmpty(ie.Name)) return FindingRow.UnnamedLabel(ie.RefBaseSystemUnitPath);
         return string.IsNullOrEmpty(found?.Name) ? null : found!.Name;
     }
 

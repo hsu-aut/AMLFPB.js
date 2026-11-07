@@ -127,6 +127,20 @@ public sealed class FindingRow
     /// small enough that we refresh the labels on every validation run rather
     /// than maintain a side index.
     /// </summary>
+    /// <summary>
+    /// An element without a name, named by its kind as the web app does
+    /// (ModelChecker label(), 031 run in the real editor): never by its id.
+    /// </summary>
+    public static string UnnamedLabel(string? systemUnitClassPath)
+    {
+        var path = systemUnitClassPath ?? "";
+        if (path.EndsWith("/FPD_Product") || path.EndsWith("/FPD_Energy") || path.EndsWith("/FPD_Information"))
+            return L.T("(state without a name)");
+        if (path.EndsWith("/FPD_ProcessOperator")) return L.T("(process operator without a name)");
+        if (path.EndsWith("/FPD_TechnicalResource")) return L.T("(technical resource without a name)");
+        return L.T("(element without a name)");
+    }
+
     private static string? LookupName(CAEXDocument? doc, string id)
     {
         if (doc?.CAEXFile == null || string.IsNullOrEmpty(id)) return null;
@@ -138,7 +152,7 @@ public sealed class FindingRow
                 if (string.Equals(ie.ID, id, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(StripBraces(ie.ID), bare, StringComparison.OrdinalIgnoreCase))
                 {
-                    return string.IsNullOrEmpty(ie.Name) ? null : ie.Name;
+                    return string.IsNullOrEmpty(ie.Name) ? UnnamedLabel(ie.RefBaseSystemUnitPath) : ie.Name;
                 }
             }
         }
