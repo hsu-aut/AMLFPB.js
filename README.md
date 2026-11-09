@@ -20,14 +20,17 @@ This is research-quality software. APIs are not yet stable.
 
 - AutomationML Editor 6.4.0 or newer
 - Windows with WebView2 runtime installed
-- FPB.js 2.0 (until its release: the branch `feature/plugin-e3` of FPB.JS)
-- For building from source: .NET 8 SDK and Node.js 18+
+- For building from source: .NET 8 SDK, Node.js 20+ and the FPB.JS repository next to this one (the plugin bundles FPB.js 2.1)
 
 ## Installation
 
-1. Download the latest `Aml.Editor.Plugin.FPB.<version>.nupkg` from the [releases page](https://github.com/hsu-aut/AMLFPB.js/releases).
-2. In the AutomationML Editor, open the Plug-In Manager, add a local source pointing at the folder that contains the `.nupkg`, and install the package.
+From nuget.org (since 0.9.0):
+
+1. In the AutomationML Editor, open the Plug-In Manager and choose the source **PublicSource** (nuget.org).
+2. Install **AMLFPB.js** (package `Aml.Editor.Plugin.FPB`).
 3. Restart the editor. The plugin appears as the "AMLFPBjs" tab.
+
+Without nuget.org: download `Aml.Editor.Plugin.FPB.<version>.nupkg` from the [releases page](https://github.com/hsu-aut/AMLFPB.js/releases), add a local source in the Plug-In Manager that points at the folder with the file, and install it from there.
 
 ## Usage
 
