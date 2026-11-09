@@ -12,6 +12,10 @@
     <PackageTags>AMLEditor; AMLEditorPlugin.Net; AutomationML; FPB; VDI3682</PackageTags>
     <Authors>VDI 3682 Project</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/hsu-aut/AMLFPB.js</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/hsu-aut/AMLFPB.js</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
 
     <BaseOutputPath>$(SolutionDir)build\Plugins\$(MSBuildProjectName)</BaseOutputPath>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
@@ -30,14 +34,20 @@
     <PackageReference Include="Aml.Editor.Plugin.Contract" Version="[4.3.0]">
       <PrivateAssets>All</PrivateAssets>
     </PackageReference>
+    <!-- Provided by the editor at run time: not copied (ExcludeAssets) and not
+         declared as dependencies of the package (PrivateAssets), or the PlugIn
+         Manager installs them from nuget.org next to the plugin. -->
     <PackageReference Include="Aml.Engine" Version="[4.*, 5.0.0)">
       <ExcludeAssets>runtime</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Aml.Editor.API" Version="[2.3.0]">
       <ExcludeAssets>runtime</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <PackageReference Include="Aml.Skins" Version="2.*">
       <ExcludeAssets>runtime</ExcludeAssets>
+      <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     <!-- WebView2: PrivateAssets=all suppresses NuGet dep in nuspec.
          GeneratePathProperty=true exposes $(PkgMicrosoft_Web_WebView2) so we can
@@ -65,6 +75,8 @@
   <!-- ─── Bundle DLLs into nupkg (from $(OutputPath), all guaranteed by the build) ── -->
   <ItemGroup>
     <None Include="$(OutputPath)$(AssemblyName).deps.json" Pack="true" PackagePath="lib\$(TargetFramework)" />
+    <!-- the README is the page of the package on nuget.org -->
+    <None Include="..\README.md" Pack="true" PackagePath="\" Visible="false" />
     <None Include="$(OutputPath)FpbMapper.Conversion.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
     <None Include="$(OutputPath)OCL.NET.Core.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
     <None Include="$(OutputPath)OCL.NET.Caex.dll" Pack="true" PackagePath="lib\$(TargetFramework)" />
