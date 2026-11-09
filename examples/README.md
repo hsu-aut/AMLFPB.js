@@ -5,7 +5,7 @@ Drei AML-Dokumente die das FPB-Plugin am praktischen Beispiel zeigen — Live-De
 | Datei | Domäne | Layer | Multi-IH | Custom-Attribute |
 |---|---|---|---|---|
 | `Showcase-A-WaermetauscherMitRegelung.aml` | Verfahrenstechnik (Wärmeübertragung mit Druckregelung) | 4 | FPD_Heating + Plant_Control_Signals (Cross-IH-Links auf PIC_4711, TT_8042) | SollTemperatur, AuslegungsLeistung, PlattenAnzahl, MaxStellgeschwindigkeit |
-| `Showcase-B-PharmaChargeUndReinigung.aml` | Pharma (Charge + CIP-Reinigung, geteilter Mixer) | 3 | FPD_Batch_Production + FPD_Cleaning, beide nutzen `Mixer_1` (gleiche `uniqueIdent`) | SafetyClass, BatchId, EquipmentId, LastCleaningStatus, Genauigkeit, Drehzahl |
+| `Showcase-B-PharmaChargeUndReinigung.aml` | Pharma (Charge + CIP-Reinigung, geteilter Mixer) | 3 | FPD_Batch_Production + FPD_Cleaning, beide nutzen `Mixer_1` (gleiche `EquipmentId` MX-OP-23) | SafetyClass, BatchId, EquipmentId, LastCleaningStatus, Genauigkeit, Drehzahl |
 | `Showcase-C-CncRobotikMontage.aml` | Maschinenbau (CNC-Fräsen + Robotik-Montage) | 3 (zwei Layer-2-Branches) | FPD_Assembly + FPD_Fasteners_Stock | MaxDrehzahl, WerkzeugAufnahme, MaxTraglast, Reichweite, Anziehmoment, Zykluszeit |
 
 ## Generieren
