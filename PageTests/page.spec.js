@@ -69,6 +69,29 @@ test('an edit posts changed with the model', async ({ page }) => {
   await expect.poll(async () => JSON.stringify(await posted(page, 'changed'))).toContain('Kontrollieren');
 });
 
+// 032a V6: changed comes with model.changed of FPB.js 2.1, which a layer switch is not
+test('a layer switch posts no changed', async ({ page }) => {
+  await openPluginPage(page);
+  await importModel(page);
+  await clearPosted(page);
+  await page.evaluate((child) => window.fpb.switchProcess(child), CHILD);
+  await expect.poll(() => page.evaluate(() => window.fpb.getCurrentProcess())).toBe(CHILD);
+  await page.waitForTimeout(500);
+  expect(await posted(page, 'changed')).toEqual([]);
+});
+
+// 032a V6: the page waits for the promise of the import; a refused one is an error
+test('an import the importer refuses is reported as error and answered by no imported', async ({ page }) => {
+  await openPluginPage(page);
+  await importModel(page, 1);
+  await clearPosted(page);
+  await send(page, { type: 'importJSON', seq: 2, data: {} });
+  await expect.poll(async () => (await posted(page, 'error')).length).toBe(1);
+  expect((await posted(page, 'error'))[0].message).toContain('import failed');
+  await page.waitForTimeout(500);
+  expect(await posted(page, 'imported')).toEqual([]);
+});
+
 test('Ctrl+S posts save with the text just typed in a field', async ({ page }) => {
   let downloads = 0;
   page.on('download', () => { downloads++; });

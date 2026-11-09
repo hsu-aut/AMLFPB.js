@@ -168,29 +168,20 @@
       }
     };
 
-    // An import runs from importJSON to import.done. The answer waits one
-    // task, so of two imports sent in a row only the newer one is answered.
-    // FPB.js fires import.done for every import, also for one that a newer
-    // import overtook; each number is answered once.
-    let importing = false;
-    let latestSeq = 0;
-    let answeredSeq = 0;
-    fpb.on('import.done', () => {
-      const seq = latestSeq;
-      setTimeout(() => {
-        if (seq !== latestSeq || seq === answeredSeq) return;
-        answeredSeq = seq;
-        importing = false;
-        post({ type: 'imported', seq, data: snapshot() });
-      }, 0);
-    });
-    fpb.on('import.error', (e) => {
-      importing = false;
-      post({ type: 'error', message: 'import failed: ' + ((e && (e.details || e.message)) || '') });
-    });
+    // An import is answered when its promise resolves (FPB.js 2.1): the model
+    // is on the canvas then. Of two imports sent in a row the older one is
+    // superseded and gets no answer.
+    const importModel = (seq, data) => {
+      fpb.importJSON(data).then(
+        () => post({ type: 'imported', seq, data: snapshot() }),
+        (e) => {
+          if (e && e.code === 'SUPERSEDED') return;
+          post({ type: 'error', message: 'import failed: ' + ((e && (e.details || e.message)) || '') });
+        });
+    };
 
-    fpb.on('changed', () => {
-      if (importing) return;
+    // edits only: no layer switch, no import (FPB.js 2.1)
+    fpb.on('model.changed', () => {
       const data = snapshot();
       if (data !== null) post({ type: 'changed', data });
     });
@@ -231,9 +222,7 @@
       try {
         switch (message.type) {
           case 'importJSON':
-            latestSeq = message.seq;
-            importing = true;
-            fpb.importJSON(message.data);
+            importModel(message.seq, message.data);
             break;
           case 'setTheme':
             fpb.setTheme(message.theme === 'dark' ? 'dark' : 'light');
@@ -259,7 +248,6 @@
             post({ type: 'log', level: 'warn', message: 'unknown message of the plugin: ' + message.type });
         }
       } catch (err) {
-        importing = false;
         post({ type: 'error', message: 'handling ' + message.type + ' failed: ' + ((err && err.stack) || err) });
       }
     });
