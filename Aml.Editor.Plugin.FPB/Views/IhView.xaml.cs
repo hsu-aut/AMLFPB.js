@@ -4,6 +4,7 @@
 // Lifecycle is owned by FpbPlugin which creates an IhView per FPD-bearing IH
 // on DocumentLoaded and disposes them on DocumentUnLoaded.
 
+using Aml.Editor.Plugin.FPB.Localization;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Text.Json;
@@ -43,6 +44,22 @@ public partial class IhView : UserControl, IDisposable
     private string? _echoBaseline;
     private bool _liveSyncSuppressed;
     private bool _disposed;
+    // why the last ApplyPending failed, for the status of Ctrl+S
+    private string? _lastApplyError;
+
+    // pending edits restored after a rebuild, shown in the page (final review)
+    private readonly RestoreImport _restore = new();
+
+    // the two checks of the findings list (V25)
+    private IReadOnlyList<ValidationFinding> _pluginFindings = Array.Empty<ValidationFinding>();
+    private IReadOnlyList<PageFinding> _pageFindings = Array.Empty<PageFinding>();
+    private HashSet<string> _pageRules = new(StringComparer.Ordinal);
+
+    // 016f E3, V28: what the tab does when the InstanceHierarchy changes in the editor
+    private readonly SyncState _sync = new();
+
+    /// <summary>The bar of a conflict stands (V28).</summary>
+    private bool InConflict => _sync.Phase == SyncPhase.Conflict;
 
     private DispatcherTimer? _liveSyncTimer;
     private static readonly TimeSpan LiveSyncPollInterval = TimeSpan.FromSeconds(2);
@@ -56,6 +73,27 @@ public partial class IhView : UserControl, IDisposable
 
     /// <summary>Raised when the IH's display name drifts (host updates the tab header text).</summary>
     public event Action<IhView, string>? LabelChanged;
+
+    /// <summary>
+    /// Raised when an element is selected in the diagram that has an object in
+    /// the InstanceHierarchy (016f E3, V26); the plugin selects it in the AML tree.
+    /// </summary>
+    public event Action<IhView, CAEXObject>? ElementSelected;
+
+    // which object is which element on which layer (V26), rebuilt with every
+    // load and every apply
+    private FpdElementIndex _index = FpdElementIndex.Empty;
+    // 016f E4, T22: the links of the file the page's delete question names,
+    // as last sent (AmlLinkList.Key)
+    private string? _lastAmlLinksKey;
+    // the tick looks for them only after a change of the document
+    private DocumentChanges? _docChanges;
+
+    /// <summary>Raised when the user switches View only in this tab (the host applies it to all tabs and remembers it).</summary>
+    public event Action<IhView, bool>? ViewOnlyChanged;
+
+    // set while the host applies the state, so the toggle does not report it back
+    private bool _applyingViewOnly;
 
     public bool HasPendingSnapshot => !string.IsNullOrEmpty(_pendingSnapshot);
     public string IhLabel => _ihLabel;
@@ -76,13 +114,17 @@ public partial class IhView : UserControl, IDisposable
     {
         if (string.IsNullOrEmpty(snapshot)) return;
         _pendingSnapshot = snapshot;
+        _sync.DiagramChanged(equalsBaseline: false);
+        // the page shows the restored edits too, the AML stays the baseline
+        var importNow = _restore.Restore(snapshot, answeredAlready: _echoBaseline != null);
+        if (importNow != null) _bridge?.ImportJson(importNow);
         // The cache survived a doc switch but we have no original timestamp,
         // so treat the restore moment as the snapshot's age start. Worst case:
         // user gets the stale-snapshot warning slightly later than ideal.
         _pendingSnapshotTimestamp = DateTime.UtcNow;
         try { PendingChanged?.Invoke(this, HasPendingSnapshot); }
         catch (Exception ex) { PluginLog.Error("PendingChanged handler threw during restore", ex); }
-        SetStatus("Restored pending edits from before the document switch — click Update InstanceHierarchy to apply, Refresh from AML to discard.");
+        SetStatus(L.T("Restored pending edits from before the document switch — click Update InstanceHierarchy to apply, Refresh from AML to discard."));
     }
 
     /// <summary>VDI 3682 findings shown in the bottom DataGrid. Refreshed at every Update / Refresh cycle.</summary>
@@ -92,7 +134,14 @@ public partial class IhView : UserControl, IDisposable
     {
         InitializeComponent();
         FindingsGrid.ItemsSource = _findings;
+        // A file dropped on the diagram opens nothing (V14). Set here, not in
+        // XAML: in the editor the XAML loader took the property from another
+        // plugin's copy of the WebView2 library and threw, so no tab was built.
+        WebView.AllowExternalDrop = false;
     }
+
+    /// <summary>Whether a file dropped on the diagram reaches the page (V14: no).</summary>
+    public bool AcceptsDroppedFiles => WebView.AllowExternalDrop;
 
     /// <summary>
     /// Hands the view the plugin's document-level commands for its Process menu.
@@ -124,6 +173,8 @@ public partial class IhView : UserControl, IDisposable
         _ih = ih;
         _ihLabel = ihLabel;
         _settings = settings;
+        _docChanges?.Dispose();
+        _docChanges = new DocumentChanges(doc);
 
         _bridge = new FpbWebView(WebView);
         _bridge.Ready += () =>
@@ -140,30 +191,71 @@ public partial class IhView : UserControl, IDisposable
             // undefined (reading 'type')" in buildSystemLimit) directly to the
             // user so they don't end up staring at an empty canvas wondering
             // what happened.
-            ShowJsErrorBanner("The viewer hit a rendering error. " +
-                              "The diagram may be incomplete. Try Refresh from AML, or check the log file for details.");
+            ShowJsErrorBanner(L.T("The viewer hit a rendering error. The diagram may be incomplete. Try Refresh from AML, or check the log file for details."));
         };
         _bridge.OnDiagramChanged += OnDiagramChangedFromJs;
+        _bridge.OnSaveRequested += OnSaveFromPage;
+        _bridge.OnSelected += OnSelectedInDiagram;
+        _bridge.OnFindings += OnFindingsFromPage;
+        // the markers of FPB.js go with "Run VDI validation" (V25)
+        _bridge.SetValidationMarkers(settings.RunVdiValidation);
         _bridge.OnImported += baseline =>
         {
             // Content-based echo detection (P0-8): the ack carries the viewer's
             // own export of the just-imported model. Any later 'changed' payload
             // equal to this baseline is import fallout; anything else is a REAL
             // user edit — no timed window that could swallow genuine edits.
-            _echoBaseline = baseline;
+            // Restored edits are imported after the AML and are no baseline.
+            var (useAsBaseline, importNext) = _restore.Answered();
+            if (useAsBaseline) _echoBaseline = baseline;
+            if (importNext != null) _bridge?.ImportJson(importNext);
             PluginLog.Debug($"[{_ihLabel}] import acknowledged by JS " +
                             (baseline != null ? "(echo baseline captured)." : "(no baseline payload — timed fallback stays active)."));
             HideJsErrorBanner();
         };
         _bridge.OnJsLog += (lvl, msg) => PluginLog.FromJs(lvl, $"[{_ihLabel}] {msg}");
-
-        try { await _bridge.InitAsync(); }
-        catch (Exception ex) { PluginLog.Error($"[{_ihLabel}] WebView2 init failed", ex); }
-
+        ApplyViewOnly(settings.ViewOnly);
         StartLiveSync();
+
+        // Not awaited: WebView2 starts only once its control has a window, that
+        // is once this tab is shown. A tab not selected, or the plugin's pane
+        // behind another one when the document opened, has none; awaiting here
+        // held up the later tabs and the selection of the first, and the plugin
+        // stayed empty (016f E3, run in the real editor). Until the page is
+        // ready, the bridge buffers what is sent.
+        _ = InitBridgeAsync(settings.DebugLogging);
+        await Task.CompletedTask;
+    }
+
+    private async Task InitBridgeAsync(bool debugTools)
+    {
+        // DevTools and the browser's context menu only for "Verbose debug logging" (V16)
+        try { if (_bridge != null) await _bridge.InitAsync(debugTools); }
+        catch (Exception ex) { PluginLog.Error($"[{_ihLabel}] WebView2 init failed", ex); }
     }
 
     public void SendTheme(string theme) => _bridge?.SendTheme(theme);
+
+    /// <summary>Show the state on the toggle and hand it to the viewer, without raising <see cref="ViewOnlyChanged"/>.</summary>
+    public void ApplyViewOnly(bool viewOnly)
+    {
+        _applyingViewOnly = true;
+        try
+        {
+            if (ViewOnlyToggle != null) ViewOnlyToggle.IsChecked = viewOnly;
+        }
+        finally
+        {
+            _applyingViewOnly = false;
+        }
+        _bridge?.SetReadOnly(viewOnly);
+    }
+
+    private void ViewOnlyToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_applyingViewOnly) return;
+        ViewOnlyChanged?.Invoke(this, ViewOnlyToggle.IsChecked == true);
+    }
 
     private void ShowJsErrorBanner(string message)
     {
@@ -201,6 +293,8 @@ public partial class IhView : UserControl, IDisposable
         try
         {
             var result = CaexToFpbJson.Convert(_doc, _ih);
+            _index = FpdElementIndex.Build(_ih);
+            SendAmlLinks(force: true);
             // Stamp AFTER ImportJson returns successfully, not before. If
             // ImportJson silently short-circuits (bridge not ready,
             // CoreWebView2 null) or PostWebMessageAsJson throws, a pre-stamp
@@ -242,21 +336,129 @@ public partial class IhView : UserControl, IDisposable
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] conversion failed", ex);
-            SetStatus("Conversion failed: " + ex.Message);
+            SetStatus(L.T("Conversion failed: {0}", ex.Message));
         }
     }
 
     // ── Update-Button: push pending FPB.js state into the IH ──────────────
-    private void UpdateButton_Click(object sender, RoutedEventArgs e)
+    // The buttons act a moment later, at Background priority: a field of the
+    // panel writes its text when it loses the focus to the button, and that
+    // change should arrive before the snapshot is read (final review of 016f E3).
+    private void UpdateButton_Click(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(new Action(UpdateNow), DispatcherPriority.Background);
+
+    private void UpdateNow()
     {
         // Every other entry point in this class checks _disposed first.
         if (_disposed || _doc == null || _ih == null) return;
-        var snapshot = _pendingSnapshot;
-        if (string.IsNullOrEmpty(snapshot))
+        if (string.IsNullOrEmpty(_pendingSnapshot))
         {
-            SetStatus("No pending viewer changes to apply.");
+            SetStatus(L.T("No pending viewer changes to apply."));
             return;
         }
+        if (ApplyPending() != ApplyResult.Applied || _disposed) return;
+
+        var swSave = System.Diagnostics.Stopwatch.StartNew();
+        var saveAttempted = _settings.AutoSaveAfterUpdate;
+        // EditorSaver may trigger ChangeSelectedObject as a side-effect,
+        // which can dispose this view mid-call. Check after.
+        var saveOk = saveAttempted && EditorSaver.TrySaveActiveDocument();
+        swSave.Stop();
+        if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-save — view disposed (likely by editor's save-side-effect)."); return; }
+        if (saveAttempted) PluginLog.Info($"[{_ihLabel}] Update save: {swSave.ElapsedMilliseconds}ms");
+
+        if (saveOk)
+            SetStatus(L.T("Updated. Editor save command invoked (Ctrl+S still works manually)."));
+        else if (saveAttempted)
+            SetStatus(L.T("Updated. Auto-save unavailable — press Ctrl+S to persist."));
+        else
+            SetStatus(L.T("Updated. Press Ctrl+S to persist."));
+    }
+
+    /// <summary>
+    /// Ctrl+S in the diagram (016f E3, V22): the page sends the model of that
+    /// moment; it is taken like a change, applied the way "Update
+    /// InstanceHierarchy" applies, and the AML file is saved through the editor.
+    /// </summary>
+    private void OnSaveFromPage(JsonElement data)
+    {
+        if (_disposed || _doc == null || _ih == null) return;
+        OnDiagramChangedFromJs(data);
+        _lastApplyError = null;
+        var outcome = SaveFlow.Run(HasPendingSnapshot, InConflict, ApplyPending, EditorSaver.TrySaveActiveDocument);
+        if (_disposed) return;
+        SetStatus(SaveFlow.StatusText(outcome, _lastApplyError));
+    }
+
+    // ── Selection between the AML tree and the diagram (V26) ──────────────
+
+    /// <summary>
+    /// Show in the diagram what was selected in the AML tree: the nearest object
+    /// upwards that the diagram has (an interface or attribute selects its
+    /// element). Returns the id of that object, or null when the diagram has none.
+    /// </summary>
+    public string? SelectFromEditor(CAEXBasicObject selected)
+    {
+        if (_disposed || _bridge == null) return null;
+        for (var o = selected; o != null; o = o.CAEXParent as CAEXBasicObject)
+        {
+            if (o is InstanceHierarchyType) return null;
+            if (o is CAEXObject withId && _index.TryGetFpb(withId.ID, out var fpbId, out var processId))
+            {
+                _bridge.Select(fpbId, processId);
+                return withId.ID;
+            }
+        }
+        return null;
+    }
+
+    private void OnSelectedInDiagram(string? id, string? processId)
+    {
+        if (_disposed || _ih == null || string.IsNullOrEmpty(id) || string.IsNullOrEmpty(processId)) return;
+        var objectId = _index.IeIdFor(id, processId);
+        // drawn after the last apply: no object in the tree yet
+        if (objectId == null) return;
+        var found = FindObject(objectId);
+        if (found == null) return;
+        try { ElementSelected?.Invoke(this, found); }
+        catch (Exception ex) { PluginLog.Error("ElementSelected handler threw", ex); }
+    }
+
+    /// <summary>The InternalElement or InternalLink of the InstanceHierarchy with this id (without braces).</summary>
+    private CAEXObject? FindObject(string bareId)
+    {
+        if (_ih == null) return null;
+        static bool Same(string? id, string bare) => string.Equals((id ?? "").Trim('{', '}'), bare, StringComparison.OrdinalIgnoreCase);
+        foreach (var process in _ih.InternalElement)
+        {
+            if (Same(process.ID, bareId)) return process;
+            foreach (var ie in process.InternalElement)
+                if (Same(ie.ID, bareId)) return ie;
+            foreach (var link in process.InternalLink)
+                if (Same(link.ID, bareId)) return link;
+        }
+        return null;
+    }
+
+    /// <summary>Give the keyboard back to the diagram (the editor focuses the plugin after a selection).</summary>
+    public void FocusDiagram()
+    {
+        if (!_disposed) WebView?.Focus();
+    }
+
+    /// <summary>A text for the status line of this tab from outside (the plugin after a save of the editor).</summary>
+    public void ShowStatus(string text) => SetStatus(text);
+
+    /// <summary>
+    /// Write the pending snapshot of the viewer into the InstanceHierarchy, with
+    /// the questions of "Update InstanceHierarchy" (large change, old snapshot).
+    /// Saving the file is up to the caller. Nothing pending counts as applied.
+    /// </summary>
+    public ApplyResult ApplyPending()
+    {
+        if (_disposed || _doc == null || _ih == null) return ApplyResult.Failed;
+        var snapshot = _pendingSnapshot;
+        if (string.IsNullOrEmpty(snapshot)) return ApplyResult.Applied;
 
         // Suppress live-sync for the ENTIRE operation, confirm dialogs included.
         // MessageBox.Show pumps the dispatcher, so without this the poll timer
@@ -272,21 +474,21 @@ public partial class IhView : UserControl, IDisposable
             // (more adds/removes than the threshold), let the user opt out — protects
             // against phantom-pending snapshots and similar accidents.
             if (_settings.ConfirmLargeUpdates && !ConfirmLargeChangeIfNeeded(snapshot))
-                return;
+                return ApplyResult.Cancelled;
 
             // Stale-snapshot guard: if the pending edit lingered across a long
             // modelling break (e.g. left the editor open over lunch), warn the
             // user before applying it. Same rationale as ConfirmLargeUpdates —
             // narrow the window where forgotten/stale state silently overwrites
             // edits made elsewhere.
-            if (!ConfirmPendingAgeIfNeeded()) return;
+            if (!ConfirmPendingAgeIfNeeded()) return ApplyResult.Cancelled;
 
             // Disable the button + set a busy status so the user gets immediate
             // feedback while UpdateInPlace runs (still synchronous on the UI thread
             // because Aml.Engine is not thread-safe). Each phase is stopwatched and
             // surfaced in the log so spikes become diagnosable.
             if (UpdateButton != null) UpdateButton.IsEnabled = false;
-            SetStatus($"Updating '{_ihLabel}' …");
+            SetStatus(L.T("Updating '{0}' …", _ihLabel));
             swTotal = System.Diagnostics.Stopwatch.StartNew();
 
             // Snapshot meta-info so we can correlate post-update behaviour with
@@ -310,11 +512,17 @@ public partial class IhView : UserControl, IDisposable
             // A re-entrant ChangeSelectedObject during the mapper call can
             // have disposed this view. Bail out before touching now-null
             // _doc/_ih any further.
-            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-mapper — view disposed during operation."); return; }
+            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-mapper — view disposed during operation."); return ApplyResult.Failed; }
 
-            _pendingSnapshot = null;
-            _pendingSnapshotTimestamp = DateTime.MinValue;
+            // a newer state that arrived during the questions stays pending
+            _pendingSnapshot = SyncState.PendingAfterApply(snapshot, _pendingSnapshot);
+            if (_pendingSnapshot == null) _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
+            _sync.Applied();
+            if (_pendingSnapshot != null) _sync.DiagramChanged(equalsBaseline: false);
+            UpdateConflictBar();
+            _index = FpdElementIndex.Build(_ih);
+            SendAmlLinks(force: false);
             // Re-anchor the echo baseline on the state we just wrote into the
             // document. Viewer == document == baseline now; a later undo back
             // to the PRE-update state differs from this baseline and correctly
@@ -326,36 +534,21 @@ public partial class IhView : UserControl, IDisposable
             var swValidator = System.Diagnostics.Stopwatch.StartNew();
             RunVdiValidationIfEnabled();
             swValidator.Stop();
-            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-validator — view disposed."); return; }
+            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-validator — view disposed."); return ApplyResult.Failed; }
 
             var swHash = System.Diagnostics.Stopwatch.StartNew();
             _lastIhHash = ComputeIhHash(_ih);
             swHash.Stop();
 
-            var swSave = System.Diagnostics.Stopwatch.StartNew();
-            var saveAttempted = _settings.AutoSaveAfterUpdate;
-            // EditorSaver may trigger ChangeSelectedObject as a side-effect,
-            // which can dispose this view mid-call. Check after.
-            var saveOk        = saveAttempted && EditorSaver.TrySaveActiveDocument();
-            swSave.Stop();
-            if (_disposed) { PluginLog.Debug($"[{_ihLabel}] Update aborted post-save — view disposed (likely by editor's save-side-effect)."); return; }
-
-            if (saveOk)
-                SetStatus("Updated. Editor save command invoked (Ctrl+S still works manually).");
-            else if (saveAttempted)
-                SetStatus("Updated. Auto-save unavailable — press Ctrl+S to persist.");
-            else
-                SetStatus("Updated. Press Ctrl+S to persist.");
-
-            swTotal?.Stop();
+            swTotal.Stop();
             PluginLog.Info($"[{_ihLabel}] Update timings — " +
                 $"mapper:{swMapper.ElapsedMilliseconds}ms " +
                 $"validator:{swValidator.ElapsedMilliseconds}ms " +
                 $"hash:{swHash.ElapsedMilliseconds}ms " +
-                $"save:{swSave.ElapsedMilliseconds}ms " +
-                $"total:{swTotal?.ElapsedMilliseconds ?? 0}ms");
+                $"total:{swTotal.ElapsedMilliseconds}ms");
 
             System.Windows.Input.CommandManager.InvalidateRequerySuggested();
+            return ApplyResult.Applied;
         }
         catch (Exception ex)
         {
@@ -366,11 +559,13 @@ public partial class IhView : UserControl, IDisposable
             if (_disposed)
             {
                 PluginLog.Debug($"[{_ihLabel}] Update threw after view disposal — suppressing UI dialog. Inner: {ex.Message}");
-                return;
+                return ApplyResult.Failed;
             }
+            _lastApplyError = ex.Message;
             PluginLog.Error($"[{_ihLabel}] Update failed", ex);
-            MessageBox.Show($"Updating this InstanceHierarchy failed:\n\n{ex.Message}",
-                "FPB.js Update Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(L.T("Updating this InstanceHierarchy failed:\n\n{0}", ex.Message),
+                L.T("FPB.js Update Error"), MessageBoxButton.OK, MessageBoxImage.Error);
+            return ApplyResult.Failed;
         }
         finally
         {
@@ -397,13 +592,11 @@ public partial class IhView : UserControl, IDisposable
         if (age.TotalMinutes < thresholdMinutes) return true;
 
         var ageDesc = age.TotalHours >= 1
-            ? $"{age.TotalHours:F1} hour(s)"
-            : $"{age.TotalMinutes:F0} minute(s)";
-        var msg = $"The pending viewer edit for '{_ihLabel}' is {ageDesc} old.\n\n" +
-                  "Apply it now? If you don't remember making it, choose No and " +
-                  "use Refresh from AML to discard the snapshot.";
+            ? L.T("{0:F1} hour(s)", age.TotalHours)
+            : L.T("{0:F0} minute(s)", age.TotalMinutes);
+        var msg = L.T("The pending viewer edit for '{0}' is {1} old.\n\nApply it now? If you don't remember making it, choose No and use Refresh from AML to discard the snapshot.", _ihLabel, ageDesc);
         var result = MessageBox.Show(msg,
-            "FPB.js — Stale pending edit",
+            L.T("FPB.js — Stale pending edit"),
             MessageBoxButton.YesNo, MessageBoxImage.Warning,
             MessageBoxResult.No);
         return result == MessageBoxResult.Yes;
@@ -429,15 +622,11 @@ public partial class IhView : UserControl, IDisposable
 
             if (elementDelta <= threshold && connectionDelta <= threshold) return true;
 
-            var msg = $"This update would significantly change InstanceHierarchy '{_ihLabel}':\n\n" +
-                      $"  Elements:    AML has {ihElements}, snapshot has {snapElements} (Δ {elementDelta})\n" +
-                      $"  Connections: AML has {ihConnections}, snapshot has {snapConnections} (Δ {connectionDelta})\n\n" +
-                      "If you didn't intentionally add/remove this many items the snapshot may be stale " +
-                      "(e.g. a phantom-pending state from a previous load).\n\n" +
-                      "Apply this update anyway?";
+            var msg = L.T("This update would significantly change InstanceHierarchy '{0}':\n\n  Elements:    AML has {1}, snapshot has {2} (Δ {3})\n  Connections: AML has {4}, snapshot has {5} (Δ {6})\n\nIf you didn't intentionally add/remove this many items the snapshot may be stale (e.g. a phantom-pending state from a previous load).\n\nApply this update anyway?",
+                _ihLabel, ihElements, snapElements, elementDelta, ihConnections, snapConnections, connectionDelta);
 
             var result = MessageBox.Show(msg,
-                "FPB.js — Confirm large InstanceHierarchy update",
+                L.T("FPB.js — Confirm large InstanceHierarchy update"),
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Warning,
                 MessageBoxResult.No);
@@ -446,7 +635,7 @@ public partial class IhView : UserControl, IDisposable
             {
                 PluginLog.Info($"[{_ihLabel}] Large-update confirmation declined: " +
                                $"snapshot={snapElements}/{snapConnections}, ih={ihElements}/{ihConnections}.");
-                SetStatus("Update cancelled.");
+                SetStatus(L.T("Update cancelled."));
                 return false;
             }
             return true;
@@ -501,7 +690,38 @@ public partial class IhView : UserControl, IDisposable
     }
 
     // ── Refresh-Button: re-render this tab from the current AML state ─────
-    private void RefreshButton_Click(object sender, RoutedEventArgs e)
+    private void RefreshButton_Click(object sender, RoutedEventArgs e) => ReloadFromAml();
+
+    // ── The bar of V28 ────────────────────────────────────────────────────
+    private void ApplyDiagramButton_Click(object sender, RoutedEventArgs e) =>
+        Dispatcher.BeginInvoke(new Action(ApplyDiagramNow), DispatcherPriority.Background);
+
+    private void ApplyDiagramNow()
+    {
+        if (_disposed || _doc == null || _ih == null) return;
+        // the diagram went back to what was loaded: nothing of it to keep
+        if (!HasPendingSnapshot)
+        {
+            ReloadFromAml();
+            return;
+        }
+        if (ApplyPending() == ApplyResult.Applied && !_disposed)
+            SetStatus(L.T("Applied the diagram to the InstanceHierarchy. Press Ctrl+S to save the file."));
+    }
+
+    private void ReloadFromAmlButton_Click(object sender, RoutedEventArgs e) => ReloadFromAml();
+
+    private void UpdateConflictBar()
+    {
+        if (ConflictBar != null) ConflictBar.Visibility = _sync.BarVisible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Load the diagram from the AML again ("Refresh from AML", "Reload from
+    /// AML"). Changes of the diagram that are not applied are lost; they are
+    /// kept as a backup in %TEMP% first.
+    /// </summary>
+    private void ReloadFromAml()
     {
         if (_doc == null || _ih == null) return;
         try
@@ -510,22 +730,28 @@ public partial class IhView : UserControl, IDisposable
             // nothing" can verify from the log whether the conversion actually
             // produced the same content or got dropped on the WebView2 floor.
             var hashBefore = _lastIhHash;
-            var hadPending = _pendingSnapshot != null;
-            PluginLog.Debug($"[{_ihLabel}] Refresh: pending={(hadPending ? "discarded" : "none")} hash-before={hashBefore:X8}");
+            var pending = _pendingSnapshot;
+            PluginLog.Debug($"[{_ihLabel}] Refresh: pending={(pending != null ? "discarded" : "none")} hash-before={hashBefore:X8}");
+            var backupPath = pending != null ? TryWritePendingBackup(pending) : null;
 
+            _restore.Reset();
             PushIhToWebView();
             _pendingSnapshot = null;
-        _pendingSnapshotTimestamp = DateTime.MinValue;
+            _pendingSnapshotTimestamp = DateTime.MinValue;
             OnPendingStateChanged();
+            _sync.Reloaded();
+            UpdateConflictBar();
             _lastIhHash = ComputeIhHash(_ih);
 
             PluginLog.Debug($"[{_ihLabel}] Refresh: hash-after={_lastIhHash:X8} changed={(hashBefore != _lastIhHash)}");
-            SetStatus("Viewer re-rendered from current AML.");
+            SetStatus(backupPath != null
+                ? L.T("Viewer re-rendered from current AML. Backup of the dropped diagram changes: {0}", backupPath)
+                : L.T("Viewer re-rendered from current AML."));
         }
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] Refresh failed", ex);
-            SetStatus("Refresh failed: " + ex.Message);
+            SetStatus(L.T("Refresh failed: {0}", ex.Message));
         }
     }
 
@@ -538,21 +764,21 @@ public partial class IhView : UserControl, IDisposable
             var result = CaexToFpbJson.Convert(_doc, _ih);
             var dialog = new SaveFileDialog
             {
-                Filter = "FPB.js JSON (*.json)|*.json|All files (*.*)|*.*",
+                Filter = L.T("FPB.js JSON") + " (*.json)|*.json|" + L.T("All files") + " (*.*)|*.*",
                 DefaultExt = ".json",
                 FileName = SanitiseFileName(_ihLabel) + ".json",
             };
             if (dialog.ShowDialog() != true) return;
             File.WriteAllText(dialog.FileName, result.Value, System.Text.Encoding.UTF8);
             PluginLog.Info($"[{_ihLabel}] Exported to {dialog.FileName}.");
-            SetStatus($"Exported: {Path.GetFileName(dialog.FileName)}");
+            SetStatus(L.T("Exported: {0}", Path.GetFileName(dialog.FileName)));
             foreach (var w in result.Warnings) PluginLog.Warn($"[{_ihLabel}] {w}");
         }
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] Export failed", ex);
-            MessageBox.Show($"Export failed:\n\n{ex.Message}",
-                "FPB.js Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(L.T("Export failed:\n\n{0}", ex.Message),
+                L.T("FPB.js Export Error"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -580,7 +806,7 @@ public partial class IhView : UserControl, IDisposable
             var stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
             var dialog = new SaveFileDialog
             {
-                Filter = "Conformance Report (*.json)|*.json|All files (*.*)|*.*",
+                Filter = L.T("Conformance Report") + " (*.json)|*.json|" + L.T("All files") + " (*.*)|*.*",
                 DefaultExt = ".json",
                 FileName = $"{SanitiseFileName(_ihLabel)}-conformance-{stamp}.json",
             };
@@ -589,14 +815,14 @@ public partial class IhView : UserControl, IDisposable
             File.WriteAllText(dialog.FileName, report.ToJson(), System.Text.Encoding.UTF8);
             PluginLog.Info($"[{_ihLabel}] Conformance report written to {dialog.FileName} " +
                            $"(errors={report.Totals.Errors}, warnings={report.Totals.Warnings}, infos={report.Totals.Infos}, clean={report.Totals.Clean}).");
-            SetStatus($"Conformance report: {Path.GetFileName(dialog.FileName)} " +
-                      $"(E:{report.Totals.Errors} W:{report.Totals.Warnings} I:{report.Totals.Infos}).");
+            SetStatus(L.T("Conformance report: {0} (E:{1} W:{2} I:{3}).", Path.GetFileName(dialog.FileName),
+                report.Totals.Errors, report.Totals.Warnings, report.Totals.Infos));
         }
         catch (Exception ex)
         {
             PluginLog.Error($"[{_ihLabel}] Conformance export failed", ex);
-            MessageBox.Show($"Writing the conformance report failed:\n\n{ex.Message}",
-                "FPB.js Conformance Export Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(L.T("Writing the conformance report failed:\n\n{0}", ex.Message),
+                L.T("FPB.js Conformance Export Error"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -619,6 +845,7 @@ public partial class IhView : UserControl, IDisposable
                 // undid their edit). A stale pending snapshot from before the
                 // undo must not survive — Update would write the already-
                 // reverted edit into the AML.
+                _sync.DiagramChanged(equalsBaseline: true);
                 if (_pendingSnapshot != null)
                 {
                     PluginLog.Debug($"[{_ihLabel}] viewer returned to baseline — clearing stale pending snapshot.");
@@ -640,6 +867,7 @@ public partial class IhView : UserControl, IDisposable
 
         _pendingSnapshot = raw;
         _pendingSnapshotTimestamp = DateTime.UtcNow;
+        _sync.DiagramChanged(equalsBaseline: false);
         OnPendingStateChanged();
         Dispatcher.BeginInvoke(() =>
             System.Windows.Input.CommandManager.InvalidateRequerySuggested());
@@ -649,6 +877,34 @@ public partial class IhView : UserControl, IDisposable
     {
         try { PendingChanged?.Invoke(this, HasPendingSnapshot); }
         catch (Exception ex) { PluginLog.Error("PendingChanged handler threw", ex); }
+    }
+
+    /// <summary>
+    /// Find the links of the file that deleting an element of this hierarchy
+    /// removes and hand them to the page when they changed since the last time
+    /// (always with <paramref name="force"/>). The index is built afresh here
+    /// so that the one of the selection stays as it is. A failure leaves the
+    /// page's list as it was.
+    /// </summary>
+    private void SendAmlLinks(bool force)
+    {
+        if (_disposed || _bridge == null || _doc == null || _ih == null) return;
+        try
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var links = AmlLinkList.For(ForeignLinks.Find(_doc, _ih), FpdElementIndex.Build(_ih));
+            sw.Stop();
+            var key = AmlLinkList.Key(links);
+            if (!force && key == _lastAmlLinksKey) return;
+            _lastAmlLinksKey = key;
+            _bridge.SetAmlLinks(links);
+            var text = $"[{_ihLabel}] AML links for the delete question: {links.Count}, found in {sw.ElapsedMilliseconds} ms";
+            if (force) PluginLog.Info(text); else PluginLog.Debug(text);
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warn($"[{_ihLabel}] AML links not updated: {ex.Message}");
+        }
     }
 
     // ── Live-sync polling: hash THIS IH only ──────────────────────────────
@@ -677,37 +933,35 @@ public partial class IhView : UserControl, IDisposable
         if (_disposed || _liveSyncSuppressed || _doc == null || _ih == null || _bridge == null) return;
         try
         {
+            // the links follow the whole file, also while the bar stands; they
+            // touch neither the diagram nor the sync state (016f E4, V20). The
+            // search walks the whole document, so only after a change of it
+            if (_docChanges?.TakeChanged() ?? true) SendAmlLinks(force: false);
+
             var hash = ComputeIhHash(_ih);
             if (hash == _lastIhHash) return;
             var hashBefore = _lastIhHash;
             _lastIhHash = hash;
 
-            // Conflict: user has unsynced FPB.js edits AND the AML tree changed.
-            // Drop pending and warn so we don't later silently overwrite the tree.
-            // Before dropping, dump the snapshot to a TEMP backup so the user has
-            // a recovery path if the discarded edits were valuable.
-            if (!string.IsNullOrEmpty(_pendingSnapshot))
+            // 016f E3, V28: a change in the editor never drops edits of the
+            // diagram. Without pending edits the diagram reloads quietly; with
+            // them the bar asks, and nothing reloads until the user chooses.
+            switch (_sync.TreeChanged())
             {
-                var backupPath = TryWritePendingBackup(_pendingSnapshot);
-                var locationHint = backupPath is null
-                    ? string.Empty
-                    : $" Backup written to {backupPath}.";
-
-                PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while FPB.js had unsynced edits — pending viewer edits dropped." +
-                               locationHint +
-                               $" hash-before={hashBefore:X8} hash-now={hash:X8} pending-bytes={_pendingSnapshot.Length}");
-                SetStatus("Tree changed externally — pending viewer edits dropped." + locationHint);
-                _pendingSnapshot = null;
-                _pendingSnapshotTimestamp = DateTime.MinValue;
-                OnPendingStateChanged();
+                case TreeChangeAction.Reload:
+                    PluginLog.Debug($"[{_ihLabel}] Live sync: AML hash changed {hashBefore:X8} -> {hash:X8}, refreshing viewer.");
+                    PushIhToWebView();
+                    break;
+                case TreeChangeAction.ShowBar:
+                    PluginLog.Warn($"[{_ihLabel}] Live sync: AML changed while the diagram had edits that are not applied — asking." +
+                                   $" hash-before={hashBefore:X8} hash-now={hash:X8}");
+                    UpdateConflictBar();
+                    SetStatus(L.T("The InstanceHierarchy was changed in the editor. Choose Apply diagram or Reload from AML."));
+                    break;
+                default:
+                    PluginLog.Debug($"[{_ihLabel}] Live sync: AML changed again while the bar stands.");
+                    break;
             }
-            else
-            {
-                PluginLog.Debug($"[{_ihLabel}] Live sync: AML hash changed {hashBefore:X8} -> {hash:X8} (no pending edits to drop)");
-            }
-
-            PluginLog.Debug($"[{_ihLabel}] external change detected, refreshing viewer.");
-            PushIhToWebView();
         }
         catch (Exception ex)
         {
@@ -762,25 +1016,22 @@ public partial class IhView : UserControl, IDisposable
     {
         if (!_settings.RunVdiValidation || _doc == null)
         {
-            UpdateFindingsUi(Array.Empty<ValidationFinding>());
+            _pluginFindings = Array.Empty<ValidationFinding>();
+            RefreshFindings();
             return;
         }
         try
         {
             var options = BuildValidationOptions(_settings);
-            var findings = Vdi3682Validator.ValidateStructured(_doc, options);
-            UpdateFindingsUi(findings);
+            _pluginFindings = Vdi3682Validator.ValidateStructured(_doc, options);
+            RefreshFindings();
 
-            if (findings.Count == 0)
+            if (_pluginFindings.Count == 0)
             {
                 PluginLog.Debug($"[{_ihLabel}] VDI 3682 validation: clean.");
                 return;
             }
-            var errors   = findings.Count(f => f.Severity == ValidationSeverity.Error);
-            var warnings = findings.Count(f => f.Severity == ValidationSeverity.Warning);
-            var infos    = findings.Count(f => f.Severity == ValidationSeverity.Info);
-            SetStatus($"VDI 3682: {errors} error(s), {warnings} warning(s), {infos} info — see Findings panel.");
-            foreach (var f in findings)
+            foreach (var f in _pluginFindings)
             {
                 var prefix = $"VDI3682 [{f.Severity}] {f.RuleId}";
                 if (f.Severity == ValidationSeverity.Error)   PluginLog.Error($"{prefix}: {f.Message}");
@@ -794,45 +1045,108 @@ public partial class IhView : UserControl, IDisposable
         }
     }
 
+    // ── One list of findings (016f E3, V25) ───────────────────────────────
+
+    private void OnFindingsFromPage(IReadOnlyList<PageFinding> findings, IReadOnlyCollection<string> rules)
+    {
+        if (_disposed) return;
+        _pageFindings = findings;
+        _pageRules = new HashSet<string>(rules, StringComparer.Ordinal);
+        RefreshFindings();
+    }
+
+    /// <summary>The findings of FPB.js and of the plugin's check in one list, each once.</summary>
+    private void RefreshFindings()
+    {
+        if (!_settings.RunVdiValidation)
+        {
+            UpdateFindingsUi(Array.Empty<FindingRow>());
+            return;
+        }
+        var merged = FindingsMerge.Merge(_pluginFindings, _pageFindings, _pageRules, PlaceOf);
+        var rows = merged.Select(m => m.Plugin != null
+            ? FindingRow.From(m.Plugin, _doc, LayerOfObject(m.Plugin.TargetIeId))
+            : FindingRow.FromPage(m.Page!, LabelOfElement(m.Page!), m.Page!.ProcessId is { } layer ? _index.ProcessName(layer) : null))
+            .ToList();
+        UpdateFindingsUi(rows);
+    }
+
+    private TargetPlace PlaceOf(string target)
+    {
+        if (_index.Contains(target)) return TargetPlace.InDiagram;
+        if (_ih != null && ContainsObject(_ih.InternalElement, target)) return TargetPlace.InThisHierarchy;
+        if (_doc != null && CaexToFpbJson.FindFpdInstanceHierarchies(_doc)
+                .Any(ih => !string.Equals(ih.ID, _ih?.ID, StringComparison.OrdinalIgnoreCase) && ContainsObject(ih.InternalElement, target)))
+            return TargetPlace.OtherFpdHierarchy;
+        return TargetPlace.Elsewhere;
+    }
+
+    private static bool ContainsObject(IEnumerable<InternalElementType> elements, string bare)
+    {
+        static bool Same(string? id, string bare) => string.Equals((id ?? "").Trim('{', '}'), bare, StringComparison.OrdinalIgnoreCase);
+        foreach (var ie in elements)
+        {
+            if (Same(ie.ID, bare)) return true;
+            if (ie.InternalLink.Any(link => Same(link.ID, bare))) return true;
+            if (ContainsObject(ie.InternalElement, bare)) return true;
+        }
+        return false;
+    }
+
+    private string? LayerOfObject(string? objectId) =>
+        !string.IsNullOrEmpty(objectId) && _index.TryGetFpb(objectId, out _, out var layer) ? _index.ProcessName(layer) : null;
+
+    private string? LabelOfElement(PageFinding finding)
+    {
+        if (string.IsNullOrEmpty(finding.ElementId) || string.IsNullOrEmpty(finding.ProcessId)) return null;
+        var objectId = _index.IeIdFor(finding.ElementId, finding.ProcessId);
+        var found = objectId != null ? FindObject(objectId) : null;
+        if (found is InternalElementType ie && string.IsNullOrEmpty(ie.Name)) return FindingRow.UnnamedLabel(ie.RefBaseSystemUnitPath);
+        return string.IsNullOrEmpty(found?.Name) ? null : found!.Name;
+    }
+
     /// <summary>
     /// Mirror the latest findings into the bottom DataGrid + the summary label.
     /// Marshalled to the UI thread because validation may run off-thread later.
     /// </summary>
-    private void UpdateFindingsUi(IReadOnlyList<ValidationFinding> findings)
+    private void UpdateFindingsUi(IReadOnlyList<FindingRow> rows)
     {
         if (!Dispatcher.CheckAccess())
         {
-            Dispatcher.Invoke(() => UpdateFindingsUi(findings));
+            Dispatcher.Invoke(() => UpdateFindingsUi(rows));
             return;
         }
 
         _findings.Clear();
-        foreach (var f in findings) _findings.Add(FindingRow.From(f, _doc));
+        foreach (var row in rows) _findings.Add(row);
 
-        if (findings.Count == 0)
+        if (rows.Count == 0)
         {
-            FindingsSummary.Text = " — no findings";
+            FindingsSummary.Text = L.T(" — no findings");
         }
         else
         {
-            var e = findings.Count(f => f.Severity == ValidationSeverity.Error);
-            var w = findings.Count(f => f.Severity == ValidationSeverity.Warning);
-            var i = findings.Count(f => f.Severity == ValidationSeverity.Info);
-            FindingsSummary.Text = $" — {e} error · {w} warning · {i} info";
+            var e = rows.Count(r => r.SeverityRank == 0);
+            var w = rows.Count(r => r.SeverityRank == 1);
+            var i = rows.Count(r => r.SeverityRank == 2);
+            FindingsSummary.Text = L.T(" — {0} error · {1} warning · {2} info", e, w, i);
         }
     }
 
     /// <summary>
-    /// Double-click on a finding asks the viewer to focus the corresponding
-    /// element. Bridge.SelectElement no-ops gracefully when the id is unknown
-    /// to the JS side (e.g. a project-level finding without an element id).
+    /// Double-click on a finding shows its element in the diagram, on its layer.
+    /// A finding of the plugin goes through the index; one without an element
+    /// in the diagram does nothing.
     /// </summary>
     private void FindingsGrid_MouseDoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
     {
         if (_disposed || _bridge == null) return;
         if (FindingsGrid.SelectedItem is not FindingRow row) return;
         if (string.IsNullOrEmpty(row.ElementId)) return;
-        _bridge.SelectElement(row.ElementId);
+        if (row.FromDiagram)
+            _bridge.Select(row.ElementId, string.IsNullOrEmpty(row.ProcessId) ? null : row.ProcessId);
+        else if (_index.TryGetFpb(row.ElementId, out var fpbId, out var processId))
+            _bridge.Select(fpbId, processId);
     }
 
     private static ValidationOptions BuildValidationOptions(PluginSettings settings)
@@ -859,6 +1173,8 @@ public partial class IhView : UserControl, IDisposable
         if (_disposed) return;
         _disposed = true;
         StopLiveSync();
+        _docChanges?.Dispose();
+        _docChanges = null;
         try { _bridge?.Dispose(); } catch { /* best effort */ }
         _bridge = null;
         // _bridge.Dispose only detaches the CoreWebView2 event handlers; the

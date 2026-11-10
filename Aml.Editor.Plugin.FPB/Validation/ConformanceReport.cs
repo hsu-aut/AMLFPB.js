@@ -19,6 +19,13 @@ public sealed class ConformanceReport
     [JsonPropertyName("document_summary")]    public DocumentSummary Document { get; init; } = new();
     [JsonPropertyName("rule_set")]            public List<RuleDescriptor> RuleSet { get; init; } = new();
     [JsonPropertyName("findings")]            public List<FindingRow> Findings { get; init; } = new();
+
+    /// <summary>
+    /// Catalog rules this report does not contain (031 N5): OCL cannot express
+    /// them (no geometry, no characteristics yet). FPB.js checks them in the
+    /// findings list of the plugin and in the web app.
+    /// </summary>
+    [JsonPropertyName("not_included")]        public List<string> NotIncluded { get; init; } = new() { "B1", "B2", "B3", "B6", "E5", "F5", "F8", "F9" };
     [JsonPropertyName("totals")]              public TotalsBlock Totals { get; init; } = new();
 
     public sealed class DocumentSummary
@@ -38,6 +45,8 @@ public sealed class ConformanceReport
     public sealed class FindingRow
     {
         [JsonPropertyName("rule_id")]   public string RuleId { get; init; } = "";
+        /// <summary>The code of the rule in the catalog (031), absent for a rule outside it.</summary>
+        [JsonPropertyName("code")]      public string? Code { get; init; }
         [JsonPropertyName("severity")]  public string Severity { get; init; } = "";
         [JsonPropertyName("message")]   public string Message { get; init; } = "";
         [JsonPropertyName("target_ie")] public string? TargetIeId { get; init; }
@@ -71,7 +80,8 @@ public static class ConformanceReportBuilder
     public static ConformanceReport Build(CAEXDocument doc, DateTimeOffset generatedAt, ValidationOptions? options = null)
     {
         options ??= ValidationOptions.Default;
-        var findings = Vdi3682Validator.ValidateStructured(doc, options);
+        // one finding per element and cause, as in the list (031 V5)
+        var findings = FindingsMerge.MostSpecific(Vdi3682Validator.ValidateStructured(doc, options));
 
         var ihCount   = doc?.CAEXFile?.InstanceHierarchy.Count ?? 0;
         var fpdIhList = doc != null
@@ -109,6 +119,7 @@ public static class ConformanceReportBuilder
             Findings = findings.Select(f => new ConformanceReport.FindingRow
             {
                 RuleId   = f.RuleId,
+                Code     = CatalogueCodes.CodeOf(f.RuleId),
                 Severity = f.Severity.ToString(),
                 Message  = f.Message,
                 TargetIeId = f.TargetIeId,

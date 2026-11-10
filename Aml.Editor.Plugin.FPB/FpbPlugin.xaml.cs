@@ -5,6 +5,7 @@
 // Update / Refresh / Export are scoped to a single IH (the active sub-tab);
 // only Import remains on the editor toolbar because it creates a brand-new IH.
 
+using Aml.Editor.Plugin.FPB.Localization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -19,7 +20,7 @@ using Microsoft.Win32;
 
 namespace Aml.Editor.Plugin.FPB;
 
-public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocumentLoad
+public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocumentLoad, INotifyAMLDocumentSaved, ISupportsSelection
 {
     private CAEXDocument? _currentDocument;
     private string? _currentFilePath;
@@ -83,6 +84,10 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
 
         PluginLog.Init();
         PluginLog.OnLine += OnDiagnosticsLine;
+
+        // An exception of the plugin that no handler caught must not end the
+        // editor (016f E3, T19): it goes to the log and the status line.
+        PluginSafetyNet.Attach(Dispatcher, ReportUnhandled);
         var asmVersion = typeof(FpbPlugin).Assembly.GetName().Version?.ToString(3) ?? "?";
         PluginLog.Info($"Plugin v{asmVersion} constructing. Log file: {PluginLog.FilePath}");
         PluginLog.Debug($"Settings file: {PluginSettings.FilePath} (debug={_settings.DebugLogging})");
@@ -199,6 +204,52 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         _currentFilePath = amlFilePath;
     }
 
+    /// <summary>
+    /// The plugin selects in the AML tree what was selected in the diagram
+    /// (016f E3, V26). The editor applies it without reporting it back through
+    /// ChangeSelectedObject.
+    /// </summary>
+    public event EventHandler<SelectionEventArgs>? Selected;
+
+    // a selection that only goes back to where it came from is not passed on again
+    private readonly SelectionEcho _selectionEcho = new();
+
+    private void OnElementSelectedInDiagram(IhView view, CAEXObject selected)
+    {
+        if (!_selectionEcho.ToTree(selected.ID)) return;
+        try
+        {
+            Selected?.Invoke(this, new ExtendedSelectionEventArgs(selected) { Select = true, Expand = true });
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error("Selecting in the AML tree failed", ex);
+            return;
+        }
+        // the editor focuses the plugin after a selection; the keys belong to the diagram
+        Dispatcher.BeginInvoke(new Action(view.FocusDiagram), System.Windows.Threading.DispatcherPriority.Input);
+    }
+
+    /// <summary>
+    /// Show in the diagram what was selected in the AML tree (V26): the tab of
+    /// its InstanceHierarchy, and the element on its layer.
+    /// </summary>
+    private void FollowEditorSelection(CAEXBasicObject selectedObject)
+    {
+        // whatever the tree selected, the diagram's next selection goes there again
+        _selectionEcho.FromTree(null);
+        InstanceHierarchyType? ih = null;
+        for (var o = selectedObject; o != null; o = o.CAEXParent as CAEXBasicObject)
+            if (o is InstanceHierarchyType found) { ih = found; break; }
+        if (ih == null) return;
+        var view = _orderedViews.FirstOrDefault(v => v.Ih != null && string.Equals(v.Ih.ID, ih.ID, StringComparison.OrdinalIgnoreCase));
+        if (view == null) return;
+        var tab = IhTabs.Items.OfType<TabItem>().FirstOrDefault(t => ReferenceEquals(t.Content, view));
+        if (tab != null && !ReferenceEquals(IhTabs.SelectedItem, tab)) IhTabs.SelectedItem = tab;
+        if (selectedObject is InstanceHierarchyType) return;
+        _selectionEcho.FromTree(view.SelectFromEditor(selectedObject));
+    }
+
     public override void ChangeSelectedObject(CAEXBasicObject selectedObject)
     {
         base.ChangeSelectedObject(selectedObject);
@@ -207,6 +258,13 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
 
         if (doc != null && !ReferenceEquals(doc, _lastPushedDocument))
         {
+            // The trees of external libraries report their selections too, with
+            // objects of other documents; they are not what the viewer shows.
+            if (!DocumentIdentity.IsOpenDocument(doc, _currentDocument, DocumentDiscoverer.TryFindCurrentDocument))
+            {
+                PluginLog.Debug($"ChangeSelectedObject: selection from another document ignored ({DescribeDoc(doc)}).");
+                return;
+            }
             _currentDocument = doc;
             _lastPushedDocument = doc;
             _ = RebuildTabsForDocumentAsync(doc);
@@ -214,6 +272,8 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         else if (doc != null)
         {
             _currentDocument = doc;
+            try { if (selectedObject != null) FollowEditorSelection(selectedObject); }
+            catch (Exception ex) { PluginLog.Error("Following the selection of the AML tree failed", ex); }
         }
         // Selection cleared (doc == null) leaves _currentDocument alone — see audit P0 #4.
     }
@@ -316,14 +376,45 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         System.Windows.Input.CommandManager.InvalidateRequerySuggested();
     }
 
+    /// <summary>
+    /// Not always the end: the editor also sends it when a plugin makes it open
+    /// another document, and loads that one next (UnloadFile with
+    /// closeApplication in the decompiled editor 6.4.3.5). Tearing down there
+    /// left the viewer without tabs when the same file was opened again (the
+    /// rebuild took it for rendered already), and the log closed for the rest
+    /// of the session. So the viewer is emptied as for a closed document and
+    /// the log stays open; it flushes every line, so a real exit loses nothing.
+    /// </summary>
     public void ApplicationClose()
     {
-        DisposeAllIhViews();
-        _pendingCache.Clear();
-        try { PluginLog.Shutdown(); } catch { /* swallow */ }
+        PluginLog.Debug("ApplicationClose: emptying the viewer (also sent before the editor opens another document).");
+        DocumentUnLoaded();
+    }
+
+    private void ReportUnhandled(Exception ex)
+    {
+        PluginLog.Error("Unhandled exception in the plugin, caught by its safety net", ex);
+        if (IhTabs.SelectedItem is TabItem { Content: IhView view })
+            view.ShowStatus(L.T("Something in the plugin went wrong: {0} Details are in the log.", ex.Message));
     }
 
     // ── ISupportsThemes ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// The editor saved the document (016f E3, V23). A tab with diagram changes
+    /// that are not applied says that the file was saved without them.
+    /// </summary>
+    public void DocumentSaved(string savedToFile)
+    {
+        foreach (var view in _orderedViews)
+        {
+            try
+            {
+                if (view.HasPendingSnapshot) view.ShowStatus(SaveFlow.SavedWithoutPendingText(view.IhLabel));
+            }
+            catch (Exception ex) { PluginLog.Error("Reporting the save of the editor failed", ex); }
+        }
+    }
 
     public void OnThemeChanged(ApplicationTheme theme)
     {
@@ -433,20 +524,22 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
                 return;
             }
 
-            var label = !string.IsNullOrWhiteSpace(ih.Name) ? ih.Name : $"InstanceHierarchy {fallbackIndex++}";
+            var label = !string.IsNullOrWhiteSpace(ih.Name) ? ih.Name : L.T("InstanceHierarchy {0}", fallbackIndex++);
 
             var view = new IhView();
             view.UseDocumentCommands(_newProcessCommand, _importCommand);
             var tab = new TabItem
             {
-                Header = label,
                 Content = view,
-                FontSize = 12,  // match outer-tab styling override in XAML
+                FontSize = 12,  // the content as before; the header gets its own size below
             };
+            UpdateTabHeader(tab, label, false);
             view.PendingChanged += (v, hasPending) => UpdateTabHeader(tab, v.IhLabel, hasPending);
             // Tab title follows IH.Name changes the user makes in the AML tree —
             // IhView raises LabelChanged after each Convert push when it notices drift.
             view.LabelChanged += (v, newLabel) => UpdateTabHeader(tab, newLabel, v.HasPendingSnapshot);
+            view.ViewOnlyChanged += (_, viewOnly) => SetViewOnly(viewOnly);
+            view.ElementSelected += OnElementSelectedInDiagram;
 
             IhTabs.Items.Add(tab);
             _orderedViews.Add(view);
@@ -517,10 +610,10 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
 
     private static void UpdateTabHeader(TabItem tab, string label, bool hasPending)
     {
-        // Keep the header as a plain string so the editor's Aml.Skins TabItem
-        // template applies its native styling (background, padding, fonts).
-        // Pending state is signalled by a leading bullet glyph in the same colour.
-        tab.Header = hasPending ? "● " + label : label;
+        // A header of its own keeps the editor's Aml.Skins TabItem style and
+        // only sets the size (016f E3, V17). Pending state is signalled by a
+        // leading bullet glyph in the same colour.
+        tab.Header = new TextBlock { Text = hasPending ? "● " + label : label, FontSize = 12 };
     }
 
     private void DisposeAllIhViews()
@@ -543,14 +636,14 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
     {
         if (_currentDocument == null)
         {
-            MessageBox.Show("Open an AML document first — the new InstanceHierarchy will be added to it.",
-                "FPB.js — New Process", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(L.T("Open an AML document first — the new InstanceHierarchy will be added to it."),
+                L.T("FPB.js — New Process"), MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         try
         {
-            var dialog = new InputDialog("New FPD Process",
-                "Process name:",
+            var dialog = new InputDialog(L.T("New FPD Process"),
+                L.T("Process name:"),
                 "NewProcess");
             if (dialog.ShowDialog() != true) return;
 
@@ -583,8 +676,8 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         catch (Exception ex)
         {
             PluginLog.Error("New Process failed", ex);
-            MessageBox.Show($"Could not create the new InstanceHierarchy:\n\n{ex.Message}",
-                "FPB.js — New Process Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show(L.T("Could not create the new InstanceHierarchy:\n\n{0}", ex.Message),
+                L.T("FPB.js — New Process Error"), MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -598,7 +691,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         {
             var openDialog = new OpenFileDialog
             {
-                Filter = "FPB.js JSON (*.json)|*.json|All files (*.*)|*.*",
+                Filter = L.T("FPB.js JSON") + " (*.json)|*.json|" + L.T("All files") + " (*.*)|*.*",
                 DefaultExt = ".json",
             };
             if (openDialog.ShowDialog() != true) return;
@@ -624,7 +717,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
                 var convertResult = FpbJsonToCaex.Convert(jsonString);
                 var saveDialog = new SaveFileDialog
                 {
-                    Filter = "AutomationML (*.aml)|*.aml|All files (*.*)|*.*",
+                    Filter = "AutomationML (*.aml)|*.aml|" + L.T("All files") + " (*.*)|*.*",
                     DefaultExt = ".aml",
                     FileName = Path.GetFileNameWithoutExtension(openDialog.FileName) + ".aml",
                 };
@@ -638,7 +731,7 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         catch (Exception ex)
         {
             PluginLog.Error("Import failed", ex);
-            MessageBox.Show($"Import failed:\n\n{ex.Message}", "FPB.js Import Error",
+            MessageBox.Show(L.T("Import failed:\n\n{0}", ex.Message), L.T("FPB.js Import Error"),
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
@@ -693,6 +786,24 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         }
     }
 
+    /// <summary>View only for all viewer tabs, remembered in the settings.</summary>
+    private void SetViewOnly(bool viewOnly)
+    {
+        if (_settings.ViewOnly != viewOnly)
+        {
+            _settings.ViewOnly = viewOnly;
+            _settings.Save();
+        }
+        foreach (var view in _orderedViews)
+        {
+            try { view.ApplyViewOnly(viewOnly); }
+            catch (Exception ex) { PluginLog.Error("View only could not be applied to a tab", ex); }
+        }
+        LogStatus(viewOnly
+            ? "View only: the diagrams take no edits. Click View only again to edit."
+            : "Editing: the diagrams take edits again.");
+    }
+
     private void AutoSaveToggle_Changed(object sender, RoutedEventArgs e)
     {
         if (AutoSaveToggle == null) return;
@@ -719,11 +830,12 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
             return;
         }
         CompatBanner.Visibility = Visibility.Visible;
-        CompatBannerText.Text = $"⚠ Editor API compatibility: {failed} of {_compatResults.Count} checks failed";
+        CompatBannerText.Text = L.T("⚠ Editor API compatibility: {0} of {1} checks failed", failed, _compatResults.Count);
         var failedDetails = string.Join("\n",
             _compatResults.Where(r => !r.Ok).Select(r => $"• {r.Name}: {r.Detail}"));
-        CompatBanner.ToolTip = "Startup self-test results:\n" + failedDetails +
-            "\n\nPlugin falls back to manual workflow where possible. Open the log for full output.";
+        // the names and details of the checks stay English: they are for the support
+        CompatBanner.ToolTip = L.T("Startup self-test results:") + "\n" + failedDetails +
+            "\n\n" + L.T("Plugin falls back to manual workflow where possible. Open the log for full output.");
     }
 
     private void ConfirmLargeUpdatesToggle_Changed(object sender, RoutedEventArgs e)

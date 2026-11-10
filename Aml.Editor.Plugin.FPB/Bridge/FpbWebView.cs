@@ -1,31 +1,51 @@
+using Aml.Editor.Plugin.FPB.Localization;
+using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text.Json;
 using System.Windows;
+using Aml.Editor.Plugin.FPB.Diagnostics;
+using Aml.Editor.Plugin.FPB.Validation;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
+using Microsoft.Win32;
 
 namespace Aml.Editor.Plugin.FPB.Bridge;
 
 /// <summary>
 /// Lifecycle + messaging wrapper around a WebView2 control hosting FPB.JS.
-/// The actual UI control is owned by the XAML; this class wires up the bridge.
+/// The actual UI control is owned by the XAML; this class wires up the bridge
+/// and keeps the WebView on its own page (016f E3, V13 to V16).
 /// </summary>
 public sealed class FpbWebView : IDisposable
 {
     private const string VirtualHost = "fpbjs.local";
     private readonly WebView2 _view;
 
+    // All tabs share one environment, and with it one browser process and the
+    // profile under %LOCALAPPDATA% (V13). A failed start is tried again.
+    private static Task<CoreWebView2Environment>? s_environment;
+
     // Lifecycle flags (P7 — set _ready only on the JS 'ready' message, not on Navigate()):
     private bool _navStarted;     // true once Navigate() has been issued
-    private bool _navSucceeded;   // true on a successful NavigationCompleted
     private bool _ready;          // true on JS 'ready' message — only then is ImportJson safe
     private string? _pendingJson;
     private string? _pendingTheme;
+    // Wanted read-only state of the viewer; a reloaded page starts editable, so
+    // it is sent again on every 'ready'
+    private bool? _readOnly;
+    // Wanted markers of the model check; sent again on every 'ready' as well
+    private bool? _validationMarkers;
+    // Links of the AML file for the delete question (016f E4); sent again on
+    // every 'ready', before a buffered import
+    private IReadOnlyList<AmlLinkEntry>? _amlLinks;
+    private readonly ImportSequence _imports = new();
 
     private EventHandler<CoreWebView2WebMessageReceivedEventArgs>? _webMessageHandler;
     private EventHandler<CoreWebView2NavigationCompletedEventArgs>? _navigationHandler;
     private EventHandler<CoreWebView2NavigationStartingEventArgs>? _navigationStartingHandler;
+    private EventHandler<CoreWebView2NewWindowRequestedEventArgs>? _newWindowHandler;
+    private EventHandler<CoreWebView2DownloadStartingEventArgs>? _downloadHandler;
     private EventHandler<CoreWebView2ProcessFailedEventArgs>? _processFailedHandler;
     private bool _disposed;
 
@@ -33,7 +53,13 @@ public sealed class FpbWebView : IDisposable
     public event Action<string>? OnError;
     public event Action<string>? OnInfo;
     public event Action<JsonElement>? OnDiagramChanged;
+    /// <summary>Ctrl+S in the diagram (V22), with the model of that moment.</summary>
+    public event Action<JsonElement>? OnSaveRequested;
     public event Action<string?>?    OnProcessSwitched;
+    /// <summary>The model check of FPB.js ran (V25): its findings and the catalog rules it checks.</summary>
+    public event Action<IReadOnlyList<PageFinding>, IReadOnlyCollection<string>>? OnFindings;
+    /// <summary>The selection of the diagram changed (V26): element id and layer, the id null when nothing is selected.</summary>
+    public event Action<string?, string?>? OnSelected;
     public event Action<string,string>? OnJsLog;   // (level, message) — for diagnostics
 
     public FpbWebView(WebView2 view)
@@ -41,12 +67,16 @@ public sealed class FpbWebView : IDisposable
         _view = view;
     }
 
-    /// <summary>Asynchronously initialise the WebView2 control and navigate to the bundled index.html.</summary>
-    public async Task InitAsync()
+    /// <summary>
+    /// Asynchronously initialise the WebView2 control and navigate to the bundled index.html.
+    /// <paramref name="debugTools"/> ("Verbose debug logging") opens the DevTools and the
+    /// context menu of the browser (V16).
+    /// </summary>
+    public async Task InitAsync(bool debugTools = false)
     {
         if (_navStarted || _disposed) return;
 
-        try { await _view.EnsureCoreWebView2Async(); }
+        try { await _view.EnsureCoreWebView2Async(await SharedEnvironmentAsync()); }
         catch (Exception ex)
         {
             ReportError("WebView2 runtime missing or failed to start: " + ex.Message);
@@ -58,8 +88,10 @@ public sealed class FpbWebView : IDisposable
         if (_disposed) return;
 
         var settings = _view.CoreWebView2.Settings;
-        settings.AreDevToolsEnabled = true;
-        settings.AreDefaultContextMenusEnabled = true;
+        settings.AreDevToolsEnabled = debugTools;
+        settings.AreDefaultContextMenusEnabled = debugTools;
+        // F5, Ctrl+R, Ctrl+P, Ctrl+Plus and the like; the page still gets the keys
+        settings.AreBrowserAcceleratorKeysEnabled = false;
         settings.IsStatusBarEnabled = false;
 
         var assetsPath = ResolveAssetsPath();
@@ -87,22 +119,16 @@ public sealed class FpbWebView : IDisposable
         _webMessageHandler = (_, e) => OnWebMessage(e);
         _navigationHandler = (_, ev) =>
         {
-            if (ev.IsSuccess)
-            {
-                _navSucceeded = true;
-            }
-            else
-            {
-                _navSucceeded = false;
-                _ready = false;
-                ReportError($"Navigation failed: WebErrorStatus={ev.WebErrorStatus}");
-            }
+            if (ev.IsSuccess) return;
+            // A navigation refused by OnNavigationStarting ends here as well,
+            // while the page is still there and ready.
+            if (ev.WebErrorStatus == CoreWebView2WebErrorStatus.OperationCanceled) return;
+            _ready = false;
+            ReportError($"Navigation failed: WebErrorStatus={ev.WebErrorStatus}");
         };
-        // A fresh navigation (initial load, or a user-triggered reload via
-        // context menu / F5) tears down the JS-side message listener. Until the
-        // new page re-announces 'ready', any PostWebMessage would be dropped, so
-        // flip _ready off here and let ImportJson/SendTheme buffer instead.
-        _navigationStartingHandler = (_, __) => _ready = false;
+        _navigationStartingHandler = (_, e) => OnNavigationStarting(e);
+        _newWindowHandler = (_, e) => OnNewWindowRequested(e);
+        _downloadHandler = (_, e) => OnDownloadStarting(e);
         // Without this, a WebView2 renderer-process crash leaves the tab blank
         // with _ready still true — every subsequent push vanishes silently. Log
         // it, drop out of the ready state so pushes buffer, and surface a banner.
@@ -115,10 +141,22 @@ public sealed class FpbWebView : IDisposable
         _view.CoreWebView2.WebMessageReceived += _webMessageHandler;
         _view.CoreWebView2.NavigationCompleted += _navigationHandler;
         _view.CoreWebView2.NavigationStarting += _navigationStartingHandler;
+        _view.CoreWebView2.NewWindowRequested += _newWindowHandler;
+        _view.CoreWebView2.DownloadStarting += _downloadHandler;
         _view.CoreWebView2.ProcessFailed += _processFailedHandler;
 
         _navStarted = true;
-        _view.CoreWebView2.Navigate($"https://{VirtualHost}/index.html");
+        _view.CoreWebView2.Navigate(BridgePolicy.PageUrl(L.German));
+    }
+
+    private static Task<CoreWebView2Environment> SharedEnvironmentAsync()
+    {
+        if (s_environment is { IsFaulted: false, IsCanceled: false } existing) return existing;
+        // the menus of WebView2 itself speak the language of the plugin (016h F2);
+        // the profile folder is the plugin's own, so no other plugin shares these options
+        s_environment = CoreWebView2Environment.CreateAsync(null, BridgePolicy.UserDataFolder(),
+            new CoreWebView2EnvironmentOptions { Language = L.Language });
+        return s_environment;
     }
 
     /// <summary>
@@ -130,6 +168,80 @@ public sealed class FpbWebView : IDisposable
         var asmLoc = typeof(FpbWebView).Assembly.Location;
         var pluginDir = !string.IsNullOrEmpty(asmLoc) ? Path.GetDirectoryName(asmLoc) : null;
         return Path.Combine(pluginDir ?? AppContext.BaseDirectory, "fpbjs-assets");
+    }
+
+    // ─── V14: the WebView stays on its page ────────────────────────────────────
+    private void OnNavigationStarting(CoreWebView2NavigationStartingEventArgs e)
+    {
+        switch (BridgePolicy.Classify(e.Uri))
+        {
+            case NavigationAction.Allow:
+                // A fresh load of the page (initial load, or a reload) tears down
+                // the JS-side message listener. Until the new page re-announces
+                // 'ready', any PostWebMessage would be dropped, so buffer.
+                _ready = false;
+                break;
+            case NavigationAction.External:
+                e.Cancel = true;
+                OpenInBrowser(e.Uri);
+                break;
+            default:
+                e.Cancel = true;
+                PluginLog.Info($"Viewer navigation refused: {e.Uri}");
+                break;
+        }
+    }
+
+    private void OnNewWindowRequested(CoreWebView2NewWindowRequestedEventArgs e)
+    {
+        e.Handled = true;
+        if (BridgePolicy.Classify(e.Uri) == NavigationAction.External) OpenInBrowser(e.Uri);
+        else PluginLog.Info($"Viewer window refused: {e.Uri}");
+    }
+
+    private static void OpenInBrowser(string uri)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(uri) { UseShellExecute = true });
+            PluginLog.Info($"Opened in the default browser: {uri}");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Warn($"Opening {uri} in the default browser failed: {ex.Message}");
+        }
+    }
+
+    // ─── V21: an export of FPB.js is saved where the user says ─────────────────
+    private void OnDownloadStarting(CoreWebView2DownloadStartingEventArgs e)
+    {
+        var deferral = e.GetDeferral();
+        _view.Dispatcher.BeginInvoke(new Action(() =>
+        {
+            try
+            {
+                var suggested = Path.GetFileName(e.ResultFilePath);
+                var dialog = new SaveFileDialog
+                {
+                    FileName = suggested,
+                    DefaultExt = Path.GetExtension(suggested),
+                    Filter = BridgePolicy.SaveFilterFor(suggested),
+                };
+                if (dialog.ShowDialog() == true) e.ResultFilePath = dialog.FileName;
+                else e.Cancel = true;
+                // no download bar of the browser
+                e.Handled = true;
+            }
+            catch (Exception ex)
+            {
+                e.Cancel = true;
+                PluginLog.Error("Saving an export of the viewer failed", ex);
+            }
+            finally
+            {
+                deferral.Complete();
+            }
+        }));
     }
 
     /// <summary>
@@ -156,11 +268,7 @@ public sealed class FpbWebView : IDisposable
         try
         {
             using var doc = JsonDocument.Parse(json);
-            envelope = JsonSerializer.Serialize(new
-            {
-                type = JsMessageType.ImportJSON,
-                data = doc.RootElement
-            });
+            envelope = JsonSerializer.Serialize(ImportJsonMessage.For(_imports.Next(), doc.RootElement));
         }
         catch (JsonException ex)
         {
@@ -190,36 +298,92 @@ public sealed class FpbWebView : IDisposable
     }
 
     /// <summary>
-    /// Ask the viewer to select an element by id and scroll it into view. Used
-    /// by host panels (findings DataGrid, AML tree integration, …). Silently
-    /// no-ops if the bridge isn't ready yet — a missing select is recoverable,
-    /// the next user interaction will work.
+    /// Look, don't touch: the viewer shows the model but takes no edits (FPB.js
+    /// setReadOnly). Kept and sent again whenever the page (re)loads.
     /// </summary>
-    public void SelectElement(string id)
+    public void SetReadOnly(bool readOnly)
+    {
+        if (_disposed) return;
+        _readOnly = readOnly;
+        if (!_ready || _view.CoreWebView2 == null) return;
+
+        var envelope = JsonSerializer.Serialize(SetReadOnlyMessage.For(readOnly));
+        _view.CoreWebView2.PostWebMessageAsJson(envelope);
+    }
+
+    /// <summary>
+    /// Show or hide the markers of the model check of FPB.js (off together with
+    /// "Run VDI validation"). Kept and sent again whenever the page (re)loads.
+    /// </summary>
+    public void SetValidationMarkers(bool show)
+    {
+        if (_disposed) return;
+        _validationMarkers = show;
+        if (!_ready || _view.CoreWebView2 == null) return;
+
+        var envelope = JsonSerializer.Serialize(SetValidationMarkersMessage.For(show));
+        _view.CoreWebView2.PostWebMessageAsJson(envelope);
+    }
+
+    /// <summary>
+    /// Hand the viewer the links of the AML file that deleting an element
+    /// removes, per layer (016f E4, T22). Kept and sent again whenever the
+    /// page (re)loads.
+    /// </summary>
+    public void SetAmlLinks(IReadOnlyList<AmlLinkEntry> links)
+    {
+        if (_disposed) return;
+        _amlLinks = links;
+        if (!_ready || _view.CoreWebView2 == null) return;
+
+        var envelope = JsonSerializer.Serialize(SetAmlLinksMessage.For(links));
+        _view.CoreWebView2.PostWebMessageAsJson(envelope);
+    }
+
+    /// <summary>
+    /// Ask the viewer to select an element by id, on the layer
+    /// <paramref name="processId"/> if given, and scroll it into view. Used by
+    /// the findings list and the AML tree. Silently no-ops if the bridge isn't
+    /// ready yet — a missing select is recoverable, the next user interaction
+    /// will work.
+    /// </summary>
+    public void Select(string id, string? processId)
     {
         if (string.IsNullOrEmpty(id)) return;
         if (_disposed) return;
         if (!_ready || _view.CoreWebView2 == null) return;
 
-        var envelope = JsonSerializer.Serialize(SelectElementMessage.For(id));
+        var envelope = JsonSerializer.Serialize(SelectMessage.For(id, processId));
         _view.CoreWebView2.PostWebMessageAsJson(envelope);
     }
 
     /// <summary>
-    /// Fired when JS posts an <c>imported</c> acknowledgement. The payload (when
-    /// present) is the viewer's OWN export snapshot of the just-imported model —
-    /// the host stores it as the echo baseline: any later <c>changed</c> payload
-    /// identical to it is import fallout, everything else is a real user edit.
-    /// Null when the JS asset predates the baseline handshake.
+    /// Fired when JS posts an <c>imported</c> acknowledgement for the import
+    /// sent last. The payload (when present) is the viewer's OWN export
+    /// snapshot of the just-imported model — the host stores it as the echo
+    /// baseline: any later <c>changed</c> payload identical to it is import
+    /// fallout, everything else is a real user edit.
     /// </summary>
     public event Action<string?>? OnImported;
 
     // ─── Internal: handle JS → host messages ─────────────────────────────────────
-    private void OnWebMessage(CoreWebView2WebMessageReceivedEventArgs e)
+    private void OnWebMessage(CoreWebView2WebMessageReceivedEventArgs e) => ReceiveMessage(e.Source, e.WebMessageAsJson);
+
+    /// <summary>
+    /// A message of the page, as WebView2 delivers it (source and JSON). The
+    /// entry point of <c>WebMessageReceived</c>, public for the tests.
+    /// </summary>
+    public void ReceiveMessage(string? source, string json)
     {
         if (_disposed) return;
+        // V15: only the plugin page may talk to the plugin
+        if (!BridgePolicy.IsOwnSource(source))
+        {
+            PluginLog.Warn($"Message from a foreign source dropped: {source}");
+            return;
+        }
         JsToHostMessage? msg;
-        try { msg = JsonSerializer.Deserialize<JsToHostMessage>(e.WebMessageAsJson); }
+        try { msg = JsonSerializer.Deserialize<JsToHostMessage>(json); }
         catch (Exception ex) { ReportError("Failed to parse JS message: " + ex.Message); return; }
         if (msg is null) return;
 
@@ -239,8 +403,30 @@ public sealed class FpbWebView : IDisposable
                 OnDiagramChanged?.Invoke(msg.Data);
                 break;
 
+            // Save, the selection and the findings lead to dialogs (the questions
+            // before applying, the editor's save) and into the editor: they run
+            // after this WebView2 event, which does not support nested message
+            // loops (final review of 016f E3).
+            case JsMessageType.Save:
+                if (msg.Data.ValueKind == JsonValueKind.Undefined
+                    || msg.Data.ValueKind == JsonValueKind.Null)
+                    break;
+                var model = msg.Data;
+                Later(() => OnSaveRequested?.Invoke(model));
+                break;
+
             case JsMessageType.ProcessSwitched:
                 OnProcessSwitched?.Invoke(msg.Id);
+                break;
+
+            case JsMessageType.Selected:
+                var (id, processId) = (msg.Id, msg.ProcessId);
+                Later(() => OnSelected?.Invoke(id, processId));
+                break;
+
+            case JsMessageType.Findings:
+                var (findings, rules) = (ReadFindings(msg.Items), ReadStrings(msg.Rules));
+                Later(() => OnFindings?.Invoke(findings, rules));
                 break;
 
             case JsMessageType.Error:
@@ -248,9 +434,15 @@ public sealed class FpbWebView : IDisposable
                 break;
 
             case JsMessageType.Imported:
+                // T18: an answer to an older import describes a model that is
+                // no longer the one sent last
+                if (msg.Seq is not { } seq || !_imports.IsCurrent(seq))
+                {
+                    PluginLog.Debug($"Answer to an older import dropped (seq {msg.Seq?.ToString() ?? "none"}).");
+                    break;
+                }
                 // P0-2/P0-8: the ack carries the viewer's own export snapshot —
-                // the host's content-based echo baseline. Older cached assets
-                // send no payload; pass null so the host can fall back.
+                // the host's content-based echo baseline.
                 var baseline = msg.Data.ValueKind == JsonValueKind.Undefined
                             || msg.Data.ValueKind == JsonValueKind.Null
                     ? null
@@ -268,10 +460,41 @@ public sealed class FpbWebView : IDisposable
         }
     }
 
+    private void Later(Action action) =>
+        _view.Dispatcher.BeginInvoke(new Action(() => { if (!_disposed) action(); }));
+
+    private static IReadOnlyList<PageFinding> ReadFindings(JsonElement items)
+    {
+        var findings = new List<PageFinding>();
+        if (items.ValueKind != JsonValueKind.Array) return findings;
+        string? Text(JsonElement item, string name) =>
+            item.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        foreach (var item in items.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object) continue;
+            findings.Add(new PageFinding(Text(item, "rule") ?? "", Text(item, "severity") ?? "info",
+                Text(item, "message") ?? "", Text(item, "elementId"), Text(item, "processId")));
+        }
+        return findings;
+    }
+
+    private static IReadOnlyCollection<string> ReadStrings(JsonElement values)
+    {
+        var strings = new HashSet<string>(StringComparer.Ordinal);
+        if (values.ValueKind != JsonValueKind.Array) return strings;
+        foreach (var value in values.EnumerateArray())
+            if (value.ValueKind == JsonValueKind.String && value.GetString() is { } s) strings.Add(s);
+        return strings;
+    }
+
     private void FlushPending()
     {
+        // the links first: a delete right after the import already asks
+        if (_amlLinks is { } al)     { SetAmlLinks(al); }
         if (_pendingJson is { } pj)  { _pendingJson  = null; ImportJson(pj); }
         if (_pendingTheme is { } pt) { _pendingTheme = null; SendTheme(pt); }
+        if (_readOnly is { } ro)     { SetReadOnly(ro); }
+        if (_validationMarkers is { } vm) { SetValidationMarkers(vm); }
     }
 
     private void ReportError(string message)
@@ -294,6 +517,8 @@ public sealed class FpbWebView : IDisposable
                 if (_webMessageHandler != null) core.WebMessageReceived -= _webMessageHandler;
                 if (_navigationHandler != null) core.NavigationCompleted -= _navigationHandler;
                 if (_navigationStartingHandler != null) core.NavigationStarting -= _navigationStartingHandler;
+                if (_newWindowHandler != null) core.NewWindowRequested -= _newWindowHandler;
+                if (_downloadHandler != null) core.DownloadStarting -= _downloadHandler;
                 if (_processFailedHandler != null) core.ProcessFailed -= _processFailedHandler;
             }
         }
@@ -302,9 +527,10 @@ public sealed class FpbWebView : IDisposable
         _webMessageHandler = null;
         _navigationHandler = null;
         _navigationStartingHandler = null;
+        _newWindowHandler = null;
+        _downloadHandler = null;
         _processFailedHandler = null;
         _ready = false;
-        _navSucceeded = false;
         _pendingJson = null;
         _pendingTheme = null;
     }

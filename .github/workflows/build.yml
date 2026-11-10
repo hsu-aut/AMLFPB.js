@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: write   # required for the release-on-tag step below
+  contents: read
 
 jobs:
   build:
@@ -82,13 +82,75 @@ jobs:
           name: Aml.Editor.Plugin.FPB-nupkg
           path: AML/fpb-aml-editor-plugin/build/Plugins/Aml.Editor.Plugin.FPB/Release/*.nupkg
 
-      # On version tags (v0.5.0, v1.2.3, …) attach the produced nupkg as a
-      # download asset on the corresponding GitHub Release. Release notes are
-      # auto-generated from the commits/PRs since the previous tag.
+  check-version:
+    # For a version tag only. The tag has to match the package version, or a tag
+    # v0.9.0 would publish a 0.8.1 package.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Aml.Editor.Plugin.FPB-nupkg
+          path: nupkg
+
+      - name: Check that the tag matches the package version
+        shell: bash
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          test -f "nupkg/Aml.Editor.Plugin.FPB.${version}.nupkg" || { ls nupkg; echo "no package for version ${version}"; exit 1; }
+
+  nuget:
+    # Publishes to nuget.org, where the AutomationML Editor finds the plugin under
+    # PublicSource by its tag AMLEditorPlugin.Net. Trusted publishing: GitHub proves
+    # the workflow's identity (OIDC) and nuget.org hands out a short-lived key, so no
+    # API key is stored in the repository. A version on nuget.org cannot be replaced,
+    # so the environment can require an approval before this job runs.
+    needs: check-version
+    runs-on: ubuntu-latest
+    environment: nuget.org
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Aml.Editor.Plugin.FPB-nupkg
+          path: nupkg
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Log in to nuget.org
+        id: login
+        uses: NuGet/login@v1
+        with:
+          # nuget.org account (profile name, not e-mail) that owns the trusted publishing policy.
+          user: ${{ vars.NUGET_USER }}
+
+      - name: Push the package
+        run: >
+          dotnet nuget push "nupkg/*.nupkg"
+          --api-key "${{ steps.login.outputs.NUGET_API_KEY }}"
+          --source https://api.nuget.org/v3/index.json
+          --skip-duplicate
+
+  release:
+    # On version tags attach the nupkg to the GitHub Release; the notes are
+    # generated from the commits and pull requests since the previous tag.
+    needs: check-version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Aml.Editor.Plugin.FPB-nupkg
+          path: nupkg
+
       - name: Publish GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: AML/fpb-aml-editor-plugin/build/Plugins/Aml.Editor.Plugin.FPB/Release/*.nupkg
+          files: nupkg/*.nupkg
           generate_release_notes: true
           fail_on_unmatched_files: true

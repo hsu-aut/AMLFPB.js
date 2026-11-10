@@ -35,6 +35,18 @@ public sealed class ValidationFinding
     public ValidationSeverity Severity { get; }
     public string Message { get; }
 
+    /// <summary>
+    /// The English template of <see cref="Message"/> with its values, for the
+    /// list of findings in the plugin's language (016h F2); null for messages
+    /// that stay English (OCL rule file). Log and report keep <see cref="Message"/>.
+    /// </summary>
+    public string? Template { get; private init; }
+    public object?[] Args { get; private init; } = Array.Empty<object?>();
+
+    /// <summary>A finding of the plugin's own rules: English message from a template and its values.</summary>
+    public static ValidationFinding Of(string ruleId, ValidationSeverity severity, string template, object?[] args, string? targetIeId = null) =>
+        new(ruleId, severity, string.Format(System.Globalization.CultureInfo.InvariantCulture, template, args), targetIeId) { Template = template, Args = args };
+
     /// <summary>Optional: AML ID of the IE the finding points at, for editor focus jumps.</summary>
     public string? TargetIeId { get; }
 
@@ -52,7 +64,7 @@ public sealed class ValidationFinding
 /// </summary>
 public interface IValidationRule
 {
-    /// <summary>Short identifier used in log messages, e.g. <c>"VDI3682.SystemLimitCardinality"</c>.</summary>
+    /// <summary>Short identifier used in log messages, e.g. <c>"VDI3682.InternalLinkInterface"</c>.</summary>
     string Id { get; }
 
     void Validate(CAEXDocument doc, ValidationContext context, List<ValidationFinding> findings);

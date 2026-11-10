@@ -1,3 +1,4 @@
+using Aml.Editor.Plugin.FPB.Localization;
 using System.Windows.Media;
 using Aml.Editor.Plugin.FPB.Validation;
 using Aml.Engine.CAEX;
@@ -15,9 +16,21 @@ public sealed class FindingRow
     private FindingRow() { }
 
     public string RuleId { get; private init; } = "";
+
+    /// <summary>The code of the rule in the catalog (031), else its id.</summary>
+    public string Rule => CatalogueCodes.CodeOf(RuleId) ?? RuleId;
     public string Message { get; private init; } = "";
     public string ElementId { get; private init; } = "";
     public string ElementLabel { get; private init; } = "";
+
+    /// <summary>The layer of the element (016f E3, V25), empty when the diagram does not show it.</summary>
+    public string Layer { get; private init; } = "";
+
+    /// <summary>The layer id of a finding of FPB.js.</summary>
+    public string ProcessId { get; private init; } = "";
+
+    /// <summary>A finding of FPB.js: <see cref="ElementId"/> is the id in the diagram, not in the AML.</summary>
+    public bool FromDiagram { get; private init; }
 
     public string SeverityName { get; private init; } = "";
     public string SeverityGlyph { get; private init; } = "";
@@ -29,7 +42,7 @@ public sealed class FindingRow
     /// friendlier element label (IE name) — when it is null or the lookup
     /// misses we fall back to the bare id.
     /// </summary>
-    public static FindingRow From(ValidationFinding f, CAEXDocument? doc)
+    public static FindingRow From(ValidationFinding f, CAEXDocument? doc, string? layer = null)
     {
         var id = f.TargetIeId ?? "";
         var label = string.IsNullOrEmpty(id) ? "" : (LookupName(doc, id) ?? id);
@@ -37,18 +50,52 @@ public sealed class FindingRow
         return new FindingRow
         {
             RuleId = f.RuleId,
-            Message = f.Message,
+            // the plugin's own rules carry a template: shown in the plugin's language
+            Message = f.Template != null ? L.T(f.Template, f.Args) : f.Message,
             // Brace-free: the double-click focus-jump feeds this to the FPB.js
             // viewer, whose element ids never carry the CAEX {…} wrapper — a
             // braced id made the jump miss silently for every mapper-built IE.
             ElementId = StripBraces(id),
             ElementLabel = label,
-            SeverityName = f.Severity.ToString(),
+            Layer = layer ?? "",
+            SeverityName = SeverityText(f.Severity),
             SeverityGlyph = GlyphFor(f.Severity),
             SeverityBrush = BrushFor(f.Severity),
             SeverityRank = RankFor(f.Severity),
         };
     }
+
+    /// <summary>A row for a finding of FPB.js (016f E3, V25).</summary>
+    public static FindingRow FromPage(PageFinding p, string? elementLabel, string? layer)
+    {
+        var severity = p.Severity switch
+        {
+            "error" => ValidationSeverity.Error,
+            "warning" => ValidationSeverity.Warning,
+            _ => ValidationSeverity.Info,
+        };
+        return new FindingRow
+        {
+            RuleId = p.Rule,
+            Message = p.Message,
+            ElementId = p.ElementId ?? "",
+            ElementLabel = elementLabel ?? p.ElementId ?? "",
+            Layer = layer ?? "",
+            ProcessId = p.ProcessId ?? "",
+            FromDiagram = true,
+            SeverityName = SeverityText(severity),
+            SeverityGlyph = GlyphFor(severity),
+            SeverityBrush = BrushFor(severity),
+            SeverityRank = RankFor(severity),
+        };
+    }
+
+    private static string SeverityText(ValidationSeverity s) => s switch
+    {
+        ValidationSeverity.Error => L.T("Error"),
+        ValidationSeverity.Warning => L.T("Warning"),
+        _ => L.T("Info"),
+    };
 
     private static string GlyphFor(ValidationSeverity s) => s switch
     {
@@ -80,6 +127,20 @@ public sealed class FindingRow
     /// small enough that we refresh the labels on every validation run rather
     /// than maintain a side index.
     /// </summary>
+    /// <summary>
+    /// An element without a name, named by its kind as the web app does
+    /// (ModelChecker label(), 031 run in the real editor): never by its id.
+    /// </summary>
+    public static string UnnamedLabel(string? systemUnitClassPath)
+    {
+        var path = systemUnitClassPath ?? "";
+        if (path.EndsWith("/FPD_Product") || path.EndsWith("/FPD_Energy") || path.EndsWith("/FPD_Information"))
+            return L.T("(state without a name)");
+        if (path.EndsWith("/FPD_ProcessOperator")) return L.T("(process operator without a name)");
+        if (path.EndsWith("/FPD_TechnicalResource")) return L.T("(technical resource without a name)");
+        return L.T("(element without a name)");
+    }
+
     private static string? LookupName(CAEXDocument? doc, string id)
     {
         if (doc?.CAEXFile == null || string.IsNullOrEmpty(id)) return null;
@@ -91,7 +152,7 @@ public sealed class FindingRow
                 if (string.Equals(ie.ID, id, StringComparison.OrdinalIgnoreCase)
                     || string.Equals(StripBraces(ie.ID), bare, StringComparison.OrdinalIgnoreCase))
                 {
-                    return string.IsNullOrEmpty(ie.Name) ? null : ie.Name;
+                    return string.IsNullOrEmpty(ie.Name) ? UnnamedLabel(ie.RefBaseSystemUnitPath) : ie.Name;
                 }
             }
         }

@@ -22,9 +22,9 @@ C9,Keine gemischten Flow-Typen,Connection,PURE_OCL_LIVE,NoMixedFlowTypes,
 C10,AlternativeFlow-Konsistenz,Connection,OPEN_PHASE2_OR_INFORMATIVE,,Phase 2: requires-pair semantics
 D1,uniqueIdent-Unikalität,Identity,PURE_OCL_LIVE,UniqueIdentifiers,
 D2,IDs unikal in Hierarchie,Identity,OPEN_PHASE2_OR_INFORMATIVE,UniqueIdsInHierarchy,Phase 2: cross-IH scope
-D3,PO benannt,Identity,PURE_OCL_LIVE,ProcessOperatorNamed,
-D4,State benannt,Identity,PURE_OCL_LIVE,StateNamed,
-D5,TR benannt,Identity,PURE_OCL_LIVE,TechnicalResourceNamed,
+D3,PO benannt,Identity,PURE_OCL_LIVE,LongNameMandatory,in D7 aufgegangen (031)
+D4,State benannt,Identity,PURE_OCL_LIVE,LongNameMandatory,in D7 aufgegangen (031)
+D5,TR benannt,Identity,PURE_OCL_LIVE,LongNameMandatory,in D7 aufgegangen (031)
 D6,Process benannt,Identity,PURE_OCL_LIVE,ProcessNamed,
 D7,longName pflicht,Identity,PURE_OCL_LIVE,LongNameMandatory,
 D8,Version+Revision vorhanden,Identity,PURE_OCL_LIVE,VersionRevisionPresent,

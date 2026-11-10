@@ -23,11 +23,10 @@ public class SideBySideValidationTests
         FpbJsonToCaex.Convert(File.ReadAllText(TestDataPath("Temperieren.json"))).Value!;
 
     /// <summary>Canonical key per rule so both validators' findings compare 1:1.</summary>
+    // 031: the hard-coded cardinality rules are gone; FPB.js checks the model
+    // and the corpus test holds it equal to OCL (ModelCheckParityTests)
     private static readonly Dictionary<string, string> RuleKey = new()
     {
-        ["VDI3682.SystemLimitCardinality"] = "A2",
-        ["VDI3682.StateCardinality"] = "A3",
-        ["VDI3682.ProcessOperatorCardinality"] = "A4",
         [Vdi3682OclRuleSet.RuleIdPrefix + "SystemLimitCardinality"] = "A2",
         [Vdi3682OclRuleSet.RuleIdPrefix + "StateMinimumCardinality"] = "A3",
         [Vdi3682OclRuleSet.RuleIdPrefix + "ProcessOperatorMinimumCardinality"] = "A4",
@@ -38,11 +37,6 @@ public class SideBySideValidationTests
             .Where(f => RuleKey.ContainsKey(f.RuleId))
             .Select(f => (RuleKey[f.RuleId], (f.Target ?? "").Trim('{', '}')))
             .ToHashSet();
-
-    private static HashSet<(string, string)> HardcodedCardinality(CAEXDocument doc) =>
-        Normalize(Vdi3682Validator
-            .ValidateStructured(doc, new ValidationOptions { UseOclEngine = false })
-            .Select(f => (f.RuleId, f.TargetIeId)));
 
     private static HashSet<(string, string)> OclCardinality(CAEXDocument doc)
     {
@@ -57,13 +51,11 @@ public class SideBySideValidationTests
     [Fact]
     public void Valid_model_no_false_positives_on_either_side()
     {
-        var doc = ConvertTemperieren();
-        Assert.Empty(HardcodedCardinality(doc));
-        Assert.Empty(OclCardinality(doc));
+        Assert.Empty(OclCardinality(ConvertTemperieren()));
     }
 
     [Fact]
-    public void Violated_model_produces_identical_findings()
+    public void Violated_model_is_reported_by_OCL()
     {
         var doc = ConvertTemperieren();
 
@@ -71,11 +63,7 @@ public class SideBySideValidationTests
         var slSuc = FpbMappings.ElementToSuc[FpbTypes.SystemLimit];
         AllIes(doc).First(ie => ie.RefBaseSystemUnitPath == slSuc).Remove();
 
-        var hardcoded = HardcodedCardinality(doc);
-        var ocl = OclCardinality(doc);
-
-        Assert.NotEmpty(hardcoded);          // the mutation must actually be detected —
-        Assert.Equal(hardcoded, ocl);        // empty == empty would prove nothing
+        Assert.Contains(OclCardinality(doc), k => k.Item1 == "A2");
     }
 
     // ---- runtime wiring --------------------------------------------------------------
@@ -95,8 +83,11 @@ public class SideBySideValidationTests
 
         // Duplicate uniqueIdent — covered ONLY by the OCL catalogue rule D1, no
         // hard-coded rule checks it. The default validator pass must report it.
+        // two operators: D1 compares states, operators and resources (031), not
+        // the system limit or a copy of a boundary state
         var elements = AllIes(doc)
-            .Where(ie => ie.Attribute["Identification"]?.Attribute["uniqueIdent"] is not null)
+            .Where(ie => (ie.RefBaseSystemUnitPath?.EndsWith("FPD_ProcessOperator") ?? false)
+                         && ie.Attribute["Identification"]?.Attribute["uniqueIdent"] is not null)
             .Take(2).ToList();
         Assert.Equal(2, elements.Count);
         foreach (var ie in elements)
