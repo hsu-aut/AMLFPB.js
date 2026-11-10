@@ -170,13 +170,15 @@
 
     // An import is answered when its promise resolves (FPB.js 2.1): the model
     // is on the canvas then. Of two imports sent in a row the older one is
-    // superseded and gets no answer.
+    // superseded and gets no answer. A refused import names its number: when
+    // it was the newer one, the older import keeps the canvas and answers
+    // (2.1.1).
     const importModel = (seq, data) => {
       fpb.importJSON(data).then(
         () => post({ type: 'imported', seq, data: snapshot() }),
         (e) => {
           if (e && e.code === 'SUPERSEDED') return;
-          post({ type: 'error', message: 'import failed: ' + ((e && (e.details || e.message)) || '') });
+          post({ type: 'error', seq, message: 'import failed: ' + ((e && (e.details || e.message)) || '') });
         });
     };
 

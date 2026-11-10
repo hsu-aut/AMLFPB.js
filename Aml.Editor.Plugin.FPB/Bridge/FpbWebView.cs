@@ -430,6 +430,8 @@ public sealed class FpbWebView : IDisposable
                 break;
 
             case JsMessageType.Error:
+                // a refused import names its number (2.1.1)
+                if (msg.Seq is { } refused) _imports.Refused(refused);
                 ReportError(msg.Message ?? "(unspecified)");
                 break;
 

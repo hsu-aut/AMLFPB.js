@@ -26,4 +26,31 @@ public class ImportSequenceTests
         Assert.False(sequence.IsCurrent(1));
         Assert.True(sequence.IsCurrent(2));
     }
+
+    // 2.1.1: when the page refuses the latest import, its canvas shows the
+    // model of an older one, and that answer is the one to take
+    [Fact]
+    public void AfterTheLatestImportIsRefusedTheAnswerToAnOlderOneCounts()
+    {
+        var sequence = new ImportSequence();
+        sequence.Next();
+        sequence.Next();
+        sequence.Refused(2);
+        Assert.True(sequence.IsCurrent(1));
+        Assert.True(sequence.IsCurrent(2));
+
+        sequence.Next();
+        Assert.False(sequence.IsCurrent(1));
+    }
+
+    [Fact]
+    public void ARefusalOfAnOlderImportChangesNothing()
+    {
+        var sequence = new ImportSequence();
+        sequence.Next();
+        sequence.Next();
+        sequence.Refused(1);
+        Assert.False(sequence.IsCurrent(1));
+        Assert.True(sequence.IsCurrent(2));
+    }
 }
