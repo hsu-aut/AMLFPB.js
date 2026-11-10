@@ -149,6 +149,7 @@ public static class De
         ["Process operator '{0}' refers to a decomposition that does not exist."] = "Prozessoperator '{0}' verweist auf eine Dekomposition, die es nicht gibt.",
         ["Element '{0}' has a reference that does not resolve."] = "Element '{0}' hat einen Verweis, der sich nicht auflösen lässt.",
         ["Process operator '{0}' lacks an input or an output."] = "Prozessoperator '{0}' fehlt ein Eingang oder ein Ausgang.",
+        ["A product goes into process operator '{0}' but none comes out, or one comes out but none goes in."] = "In den Prozessoperator '{0}' geht ein Produkt hinein, aber keins kommt heraus, oder es kommt eins heraus, aber keins geht hinein.",
         ["State '{0}' is neither a product, an energy nor an information."] = "Zustand '{0}' ist weder Produkt noch Energie noch Information.",
         ["Connection '{0}' connects an element with itself."] = "Verbindung '{0}' verbindet ein Element mit sich selbst.",
         ["Element '{0}' is not connected."] = "Element '{0}' ist nicht verbunden.",

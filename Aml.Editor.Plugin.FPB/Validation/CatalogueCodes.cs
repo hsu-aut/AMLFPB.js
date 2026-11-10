@@ -38,6 +38,7 @@ public static class CatalogueCodes
         [Oc("StateHasConcreteType")] = "G2",
         [Oc("NoSelfReference")] = "G3",
         [Oc("NoOrphanedElements")] = "G4",
+        [Oc("ProductBalance")] = "G6",
         [Oc("SourceTargetSameProcess")] = "I3",
     };
 

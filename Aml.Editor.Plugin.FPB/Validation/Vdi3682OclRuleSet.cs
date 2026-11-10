@@ -54,6 +54,7 @@ public static class Vdi3682OclRuleSet
         ["StateHasConcreteType"] = Ocl.ValidationSeverity.Error,                   // G2
         ["NoSelfReference"] = Ocl.ValidationSeverity.Error,                        // G3
         ["NoOrphanedElements"] = Ocl.ValidationSeverity.Warning,                   // G4
+        ["ProductBalance"] = Ocl.ValidationSeverity.Info,                          // G6 (Hinweis wie in FPB.js)
         ["SourceTargetSameProcess"] = Ocl.ValidationSeverity.Error,                // I3
     };
 
@@ -230,6 +231,7 @@ public static class Vdi3682OclRuleSet
             "StateHasConcreteType" => ValidationFinding.Of(ruleId, severity, "State '{0}' is neither a product, an energy nor an information.", args, target),
             "NoSelfReference" => ValidationFinding.Of(ruleId, severity, "Connection '{0}' connects an element with itself.", args, target),
             "NoOrphanedElements" => ValidationFinding.Of(ruleId, severity, "Element '{0}' is not connected.", args, target),
+            "ProductBalance" => ValidationFinding.Of(ruleId, severity, "A product goes into process operator '{0}' but none comes out, or one comes out but none goes in.", args, target),
             "SourceTargetSameProcess" => ValidationFinding.Of(ruleId, severity, "Connection '{0}' joins elements of two processes.", args, target),
             var other => ValidationFinding.Of(ruleId, severity, "Element '{0}' breaks rule {1}.", new object?[] { label, other }, target),
         };
