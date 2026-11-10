@@ -108,7 +108,7 @@ public class ListAndReportTests
     public void The_report_names_the_rules_it_does_not_contain()
     {
         var report = ConformanceReportBuilder.Build(OperatorToOperator(), DateTimeOffset.Parse("2026-11-06T00:00:00Z"));
-        Assert.Equal(new[] { "B1", "B2", "B3", "B6", "E5", "F5", "F8", "F9" }, report.NotIncluded);
+        Assert.Equal(new[] { "B1", "B2", "B3", "B6", "E5", "F5", "F8", "F9", "G6" }, report.NotIncluded);
         Assert.Contains("\"not_included\"", report.ToJson());
     }
 

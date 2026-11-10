@@ -23,9 +23,11 @@ public sealed class ConformanceReport
     /// <summary>
     /// Catalog rules this report does not contain (031 N5): OCL cannot express
     /// them (no geometry, no characteristics yet). FPB.js checks them in the
-    /// findings list of the plugin and in the web app.
+    /// findings list of the plugin and in the web app. G6 (a product that goes
+    /// into an operator also comes out, 2026-11-10) OCL could express, but the
+    /// rule set has no invariant for it yet.
     /// </summary>
-    [JsonPropertyName("not_included")]        public List<string> NotIncluded { get; init; } = new() { "B1", "B2", "B3", "B6", "E5", "F5", "F8", "F9" };
+    [JsonPropertyName("not_included")]        public List<string> NotIncluded { get; init; } = new() { "B1", "B2", "B3", "B6", "E5", "F5", "F8", "F9", "G6" };
     [JsonPropertyName("totals")]              public TotalsBlock Totals { get; init; } = new();
 
     public sealed class DocumentSummary
