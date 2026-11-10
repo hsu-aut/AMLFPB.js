@@ -27,8 +27,9 @@ This is research-quality software. APIs are not yet stable.
 From nuget.org (since 0.9.0):
 
 1. In the AutomationML Editor, open the Plug-In Manager and choose the source **PublicSource** (nuget.org).
-2. Install **AMLFPB.js** (package `Aml.Editor.Plugin.FPB`).
-3. Restart the editor. The plugin appears as the "AMLFPBjs" tab.
+2. Install **AMLFPB.js** (package `Aml.Editor.Plugin.FPB`). To update an installed version, use the tab **updates** instead.
+3. The Plug-In Manager keeps showing "Loading an AutomationML Editor PlugIn" until you confirm the message **Restart required**. That message is a separate window and may sit behind the editor; look for it in the taskbar.
+4. Restart the editor. The plugin appears as the "AMLFPBjs" tab.
 
 Without nuget.org: download `Aml.Editor.Plugin.FPB.<version>.nupkg` from the [releases page](https://github.com/hsu-aut/AMLFPB.js/releases), add a local source in the Plug-In Manager that points at the folder with the file, and install it from there.
 
@@ -42,6 +43,7 @@ After installation, open any AML document with FPD content, or use **New Process
 - `Ctrl+S` in the diagram applies the buffered changes and saves the AML file through the editor in one step, including what you just typed into a field. Saving through the editor's own menu does not take them; the status line then says so.
 - Changes in the AML tree are picked up by the viewer automatically after a few seconds. **Refresh** forces an immediate refresh.
 - If the AML tree changes while the diagram has buffered changes, nothing is dropped: a bar above the diagram asks whether to **Apply diagram** (the diagram wins where both changed the same element) or **Reload from AML** (the diagram changes go, a backup stays in `%TEMP%\fpb-plugin\pending-backup`).
+- Opening another file or closing the editor while a tab has buffered changes does not lose them: the plugin keeps them in `%APPDATA%\AutomationMLEditor\FpbPlugin\pending`, and when the same file is opened again a bar above the diagram offers **Restore** or **Discard**. If the file changed since, restoring brings up the bar with **Apply diagram** and **Reload from AML**.
 - With the focus in the diagram, its shortcuts (`Ctrl+Z`, `Ctrl+Y`, `Delete`, `Ctrl+C`, `Ctrl+V`, `Ctrl+F`, ...) act in the diagram only; the editor does not undo, delete or copy anything in the tree.
 - Deleting an element that other parts of the AML file link to (a plant hierarchy, a link drawn in the editor, a link stored in the element that points outside) asks first and names those links: applying the diagram removes them. The list follows the whole file within a few seconds. A port that such a link shares with a flow stays when only the flow is deleted.
 - **Export** in the FPB.js toolbar saves the diagram as JSON, VDI 3682 XML, SVG, PNG or PDF through the Windows save dialog. Links in the FPB.js information dialog open in the default browser.
