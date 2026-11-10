@@ -64,6 +64,9 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
     // never matched. OriginID survives the swap.
     private readonly Dictionary<(string originId, string ihId), string> _pendingCache = new();
 
+    // B25: changes that were not applied when a file was closed, kept on disk
+    private readonly PendingStore _pendingStore = PendingStore.Default;
+
     // OriginID names the authoring TOOL (same GUID in every editor-saved file);
     // suffix the document's own FileName so two showcase files never share a
     // cache identity.
@@ -355,6 +358,22 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
 
     public void DocumentUnLoaded()
     {
+        // B25: the editor has unloaded the document already (another file opens,
+        // or the editor closes), so changes of the diagram that are not applied
+        // can no longer go into it. Keep them on disk; the tab offers them when
+        // the same file is opened again.
+        foreach (var view in _orderedViews)
+        {
+            try
+            {
+                var entry = view.PendingEntryNow();
+                if (entry == null) continue;
+                _pendingStore.Save(entry);
+                PluginLog.Info($"[{view.IhLabel}] Kept diagram changes that were not applied for '{entry.FileName}'.");
+            }
+            catch (Exception ex) { PluginLog.Error("Keeping diagram changes that were not applied failed", ex); }
+        }
+
         // Document is closing for real — drop any pending-snapshot cache entries
         // tied to it. (Undock/redock goes through DisposeAllIhViews directly and
         // KEEPS the cache, so this method must only nuke truly-closed documents.)
@@ -496,7 +515,8 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
         // own generation check. Any rebuild or DocumentUnLoaded that starts later
         // bumps the token and makes this run bail at its next checkpoint.
         // Capture pending snapshots from the views we're about to tear down so
-        // unsaved edits survive an undock/redock or doc-switch round trip.
+        // unsaved edits survive an undock/redock. A switch to another document
+        // goes through DocumentUnLoaded first, which keeps them on disk (B25).
         CapturePendingSnapshotsToCache();
 
         DisposeAllIhViews();
@@ -568,6 +588,11 @@ public partial class FpbPlugin : PluginViewBase, ISupportsThemes, INotifyAMLDocu
                 {
                     view.RestorePendingSnapshot(snapshot);
                     PluginLog.Info($"[{label}] Restored pending edits cached from before the tab rebuild.");
+                }
+                // B25: changes kept when this file was closed last time
+                else if (_pendingStore.Find(view.FileName, view.IhId) is { } saved)
+                {
+                    view.OfferSavedChanges(saved, _pendingStore);
                 }
             }
             catch (Exception ex)

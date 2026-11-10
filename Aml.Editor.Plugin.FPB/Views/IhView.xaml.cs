@@ -172,6 +172,10 @@ public partial class IhView : UserControl, IDisposable
         _doc = doc;
         _ih = ih;
         _ihLabel = ihLabel;
+        // B25: the key of saved changes, taken now; when the editor unloads the
+        // document it has already reset the path the plugin knows
+        FileName = doc.CAEXFile?.FileName ?? "";
+        IhId = ih.ID ?? "";
         _settings = settings;
         _docChanges?.Dispose();
         _docChanges = new DocumentChanges(doc);
@@ -710,6 +714,81 @@ public partial class IhView : UserControl, IDisposable
     }
 
     private void ReloadFromAmlButton_Click(object sender, RoutedEventArgs e) => ReloadFromAml();
+
+    // ── B25: changes saved when the file was closed ────────────────────────
+
+    /// <summary>File name of the CAEX file this view was bound to (key of saved changes).</summary>
+    public string FileName { get; private set; } = "";
+
+    /// <summary>ID of the InstanceHierarchy this view was bound to (key of saved changes).</summary>
+    public string IhId { get; private set; } = "";
+
+    private PendingEntry? _savedOffer;
+    private PendingStore? _savedStore;
+
+    /// <summary>The changes that are not applied, to keep when the file closes; null when there are none.</summary>
+    public PendingEntry? PendingEntryNow() =>
+        HasPendingSnapshot ? new PendingEntry(FileName, IhId, _ihLabel, DateTime.Now, _lastIhHash, _pendingSnapshot!) : null;
+
+    /// <summary>Show the bar that offers changes kept when the file was closed last time.</summary>
+    public void OfferSavedChanges(PendingEntry entry, PendingStore store)
+    {
+        _savedOffer = entry;
+        _savedStore = store;
+        SavedChangesMessage.Text = L.T("Diagram changes that were not applied were saved when the file was closed ({0}).",
+            entry.SavedAt.ToString(L.German ? "dd.MM.yyyy HH:mm" : "yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture));
+        SavedChangesBar.Visibility = Visibility.Visible;
+        PluginLog.Info($"[{_ihLabel}] Offering diagram changes saved on {entry.SavedAt:O}.");
+    }
+
+    private void HideSavedChanges()
+    {
+        _savedOffer = null;
+        _savedStore = null;
+        SavedChangesBar.Visibility = Visibility.Collapsed;
+    }
+
+    private void RestoreSavedButton_Click(object sender, RoutedEventArgs e)
+    {
+        var entry = _savedOffer;
+        var store = _savedStore;
+        if (entry == null || _disposed) return;
+        HideSavedChanges();
+        try
+        {
+            // edits made meanwhile are replaced; keep them as a backup first
+            if (HasPendingSnapshot) TryWritePendingBackup(_pendingSnapshot!);
+            RestorePendingSnapshot(entry.Snapshot);
+            store?.Remove(entry.FileName, entry.IhId);
+            // the file changed since: the known bar asks which side to keep
+            if (_ih != null && !string.Equals(entry.IhHash, ComputeIhHash(_ih), StringComparison.Ordinal)
+                && _sync.TreeChanged() == TreeChangeAction.ShowBar)
+            {
+                UpdateConflictBar();
+                SetStatus(L.T("The InstanceHierarchy changed since the diagram changes were saved. Choose in the bar above."));
+            }
+            PluginLog.Info($"[{_ihLabel}] Restored diagram changes saved on {entry.SavedAt:O}.");
+        }
+        catch (Exception ex)
+        {
+            PluginLog.Error($"[{_ihLabel}] Restoring saved diagram changes failed", ex);
+            SetStatus(L.T("Restoring the saved diagram changes failed: {0}", ex.Message));
+        }
+    }
+
+    private void DiscardSavedButton_Click(object sender, RoutedEventArgs e)
+    {
+        var entry = _savedOffer;
+        var store = _savedStore;
+        if (entry == null) return;
+        HideSavedChanges();
+        var backup = TryWritePendingBackup(entry.Snapshot);
+        store?.Remove(entry.FileName, entry.IhId);
+        PluginLog.Info($"[{_ihLabel}] Discarded diagram changes saved on {entry.SavedAt:O}; backup {backup ?? "(none)"}.");
+        SetStatus(backup != null
+            ? L.T("Discarded the saved diagram changes. A copy is at {0}", backup)
+            : L.T("Discarded the saved diagram changes."));
+    }
 
     private void UpdateConflictBar()
     {
