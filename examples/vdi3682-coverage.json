@@ -2,12 +2,12 @@
   "schema": "amlfpbjs.vdi3682.coverage/v1",
   "generated_at": "2026-06-15T00:00:00.0000000\u002B00:00",
   "totals": {
-    "PURE_OCL_LIVE": 26,
+    "PURE_OCL_LIVE": 27,
     "OPEN_PHASE2_OR_INFORMATIVE": 15,
     "OPEN_PLUGIN_GEOMETRY": 11,
     "PHASE2_OCL_PENDING": 4,
     "OPEN_MAPPER_SCHEMA": 4,
-    "TOTAL_CATALOGUE": 60
+    "TOTAL_CATALOGUE": 61
   },
   "rules": [
     {
@@ -360,6 +360,13 @@
       "ocl_constraint": "SubProcessNotEmpty",
       "bucket": "OPEN_PHASE2_OR_INFORMATIVE",
       "note": "Phase 2"
+    },
+    {
+      "catalog_id": "G6",
+      "title": "Produkt rein, Produkt raus",
+      "category": "Semantic",
+      "ocl_constraint": "ProductBalance",
+      "bucket": "PURE_OCL_LIVE"
     },
     {
       "catalog_id": "H1",
