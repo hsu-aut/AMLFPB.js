@@ -46,6 +46,7 @@ G2,State hat konkreten Typ,Semantic,PURE_OCL_LIVE,StateHasConcreteType,
 G3,Keine Selbstreferenz,Semantic,PURE_OCL_LIVE,NoSelfReference,
 G4,Keine verwaisten Elemente,Semantic,PURE_OCL_LIVE,NoOrphanedElements,
 G5,SubProcess nicht leer,Semantic,OPEN_PHASE2_OR_INFORMATIVE,SubProcessNotEmpty,Phase 2
+G6,"Produkt rein, Produkt raus",Semantic,PURE_OCL_LIVE,ProductBalance,
 H1,Bounds vorhanden,Geometry,OPEN_PLUGIN_GEOMETRY,BoundsPresent,Plugin-Layer
 H2,Bounds positiv,Geometry,OPEN_PLUGIN_GEOMETRY,BoundsPositive,Plugin-Layer
 H3,Waypoints am Rand,Geometry,OPEN_PLUGIN_GEOMETRY,WaypointsAtBorder,Plugin-Layer
@@ -65,5 +66,5 @@ J4,ExternalReference-Files existent,Schema,OPEN_MAPPER_SCHEMA,ExternalReferenceF
 # OPEN_PHASE2_OR_INFORMATIVE,15
 # OPEN_PLUGIN_GEOMETRY,11
 # PHASE2_OCL_PENDING,4
-# PURE_OCL_LIVE,26
-# TOTAL_CATALOGUE,60
+# PURE_OCL_LIVE,27
+# TOTAL_CATALOGUE,61

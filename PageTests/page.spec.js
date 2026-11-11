@@ -92,6 +92,19 @@ test('an import the importer refuses is reported as error and answered by no imp
   expect(await posted(page, 'imported')).toEqual([]);
 });
 
+// 2.1.1: of two imports in a row the newer is refused; the error names its
+// number, and the older import, whose model is on the canvas, is answered
+test('a refused newer import names its number and the older one is answered', async ({ page }) => {
+  await openPluginPage(page);
+  await page.evaluate((data) => {
+    window.__hostSend({ type: 'importJSON', seq: 1, data });
+    window.__hostSend({ type: 'importJSON', seq: 2, data: {} });
+  }, clone());
+  await expect.poll(async () => (await posted(page, 'imported')).map((m) => m.seq)).toEqual([1]);
+  const errors = await posted(page, 'error');
+  expect(errors.map((m) => m.seq)).toEqual([2]);
+});
+
 test('Ctrl+S posts save with the text just typed in a field', async ({ page }) => {
   let downloads = 0;
   page.on('download', () => { downloads++; });

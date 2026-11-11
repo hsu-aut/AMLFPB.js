@@ -49,6 +49,50 @@ public class OclRuleSetTests
         throw new FileNotFoundException("FPB.JS/tests/unit/aml/oracle/inputs/generated/mixed.aml was not found above the test folder.");
     }
 
+    private const string Gutprodukt = "1a9fc4c7-3c89-4277-8965-3b186eaa2672";
+    private const string Ausschuss = "61a6df5b-1081-4651-93ae-572fea3994ab";
+
+    private static void MakeInformation(JsonArray model, string id)
+    {
+        Data(model, id)["$type"] = "fpb:Information";
+        foreach (var v in model.OfType<JsonObject>().Where(e => e["process"] != null)
+                     .SelectMany(e => e["elementVisualInformation"]!.AsArray().OfType<JsonObject>())
+                     .Where(v => (string?)v["id"] == id))
+            v["type"] = "fpb:Information";
+    }
+
+    // G6 (2026-11-10, user): a product does not vanish in an operator; a note, as in FPB.js
+    [Fact]
+    public void A_product_that_vanishes_in_an_operator_is_a_G6_note()
+    {
+        var doc = Temperieren(model => { MakeInformation(model, Gutprodukt); MakeInformation(model, Ausschuss); });
+
+        var g6 = Check(doc).Where(f => f.RuleId == "VDI3682.OCL.ProductBalance").ToList();
+
+        Assert.Single(g6);
+        Assert.Equal(Pruefen, Bare(g6[0].TargetIeId));
+        Assert.Equal(ValidationSeverity.Info, g6[0].Severity);
+        Assert.Equal("G6", CatalogueCodes.CodeOf(g6[0].RuleId));
+    }
+
+    // The file is split at blank lines and only blocks starting with "context"
+    // count; a comment above "context" dropped G6 silently (2026-11-10)
+    [Fact]
+    public void Every_invariant_of_the_rule_file_becomes_a_rule()
+    {
+        var inFile = System.Text.RegularExpressions.Regex.Matches(FpbValidationRules.PureRules, @"\binv\s+(\w+)\s*:")
+            .Select(m => m.Groups[1].Value).OrderBy(n => n).ToList();
+        var loaded = Vdi3682OclRuleSet.LoadRuleSpecs(includeHardcodedCovered: true)
+            .Select(s => s.Id.Replace("VDI3682.OCL.", "")).OrderBy(n => n).ToList();
+        Assert.Equal(inFile, loaded);
+    }
+
+    [Fact]
+    public void Temperieren_keeps_its_products_and_gets_no_G6()
+    {
+        Assert.DoesNotContain(Check(Temperieren()), f => f.RuleId == "VDI3682.OCL.ProductBalance");
+    }
+
     [Fact]
     public void An_element_without_any_name_gets_one_D7_warning_and_no_D3_to_D5()
     {

@@ -157,6 +157,47 @@
                                 Padding="8,2"/>
                     </Grid>
                 </Border>
+                <!-- B25: changes of the diagram that were not applied when the
+                     file was closed, offered when it is opened again -->
+                <Border x:Name="SavedChangesBar"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource MahApps.Brushes.ThemeBackground}"
+                        BorderBrush="{DynamicResource MahApps.Brushes.Accent}"
+                        BorderThickness="0,0,0,2"
+                        Padding="12,8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="&#xE946;"
+                                   FontFamily="Segoe MDL2 Assets"
+                                   FontSize="16"
+                                   Foreground="{DynamicResource MahApps.Brushes.Accent}"
+                                   VerticalAlignment="Center"
+                                   Margin="0,0,8,0"/>
+                        <TextBlock Grid.Column="1"
+                                   x:Name="SavedChangesMessage"
+                                   TextWrapping="Wrap"
+                                   Foreground="{DynamicResource MahApps.Brushes.ThemeForeground}"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="2"
+                                x:Name="RestoreSavedButton"
+                                Content="{l:T 'Restore'}"
+                                Click="RestoreSavedButton_Click"
+                                Margin="12,0,0,0"
+                                Padding="8,2"/>
+                        <Button Grid.Column="3"
+                                x:Name="DiscardSavedButton"
+                                Content="{l:T 'Discard'}"
+                                Click="DiscardSavedButton_Click"
+                                Margin="8,0,0,0"
+                                Padding="8,2"/>
+                    </Grid>
+                </Border>
                 <Border x:Name="JsErrorBanner"
                         Background="{DynamicResource MahApps.Brushes.ThemeBackground}"
                         BorderBrush="{DynamicResource MahApps.Brushes.Accent}"
